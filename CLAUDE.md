@@ -13,7 +13,8 @@ Weekly Thursday automation: screenshot Shopee ads performance for underperformin
 - `read_brands_from_sheet.py` — Fetches brand list from Google Sheet "Bottom" tab via service account. Skips red-text rows (belum sebulan) and HOL (Lazada-only).
 - `send_email.py` — Sends email notifications via Gmail API (login reminders and success reports).
 - `config.py` — URLs, Slides IDs, email recipients, timing constants.
-- `brands.csv` — Maps brand `akun` → `shopee_username`. Source of truth for brand lookups.
+- `brands.csv` — Maps brand `akun` → `shopee_username`. What the bot reads at runtime.
+- `sync_brands_from_sheet.py` — Syncs `brands.csv` from the mapping source of truth (since 2026-08-06): sheet `1s4MAeV0TMoIA8i0t5xHlxsj01j5uDlNmOliIt7biknY` tab **"Monitored Stores"** (A = akun, B = username Shopee, C = kode partner; rows 1–2 are title/header, values need stripping). Appends new brands; username conflicts are reported but NOT overwritten (verified csv values win — the sheet has had stale usernames, e.g. TH.WONE-M). `--dry-run` to preview. The old master-sheet BRAND tab was deleted 2026-08-06.
 - `capture_ref_images.py` / `ref_images/` — Reference images for visual debugging / calibration aids.
 - `mouse_tracker.py` — Helper to print live mouse position while calibrating.
 - `_calibrate_helper.py` — Navigates to a brand's Iklan Shopee page, scrolls to Performa, then runs `calibrate_cards()` (used when the page must be set up before card calibration).
@@ -23,6 +24,7 @@ Weekly Thursday automation: screenshot Shopee ads performance for underperformin
 - `_calibrate_nama_toko.py` / `_calibrate_pilih_toko.py` — Live hover calibration for the Pilih Toko page coords (`NAMA_TOKO_DROPDOWN`, `USERNAME_TOKO_OPTION`, `SEARCH_BOX`, `FIRST_DETAIL_LINK`).
 - `_setup_and_capture.py` — Navigates to a brand's Iklan page, scrolls, takes ONE full screencapture (`/tmp/cards_full.png`) for measuring card centers from the image (more accurate than hover). `_setup_and_track.py` — same nav, then live mouse-position tracker.
 - `_manual_capture.py` — Manual screenshot fallback: dialogs prompt the user to set up the page (correct metrics + filter), bot just screencaptures with the calibrated crop. Use when auto-detect can't recover.
+- `_rescue_capture.py` — Adaptive-scroll fallback (added 2026-07-23): navigates from Pilih Toko like the normal bot but replaces the fixed `scroll_to_performa` with small scroll steps that re-scan for the two-row card pattern until the cards sit in the crop window (accepts offset −80..+100), plus extra page-load wait. Use for brands whose Iklan page defeats the fixed scroll (e.g. KENL-M: extra Promosi/Misi Penjual sections + slow load push Performa far below the fixed landing point). A large positive offset can pull the macOS Dock into the crop bottom — trim the saved PNGs if needed.
 - `credentials.json` / `token.pickle` — Google OAuth for Slides/Drive (gitignored).
 - `token_gmail.pickle` — Google OAuth for Gmail send (gitignored).
 - `service_account.json` — Service account key for Sheets read (gitignored).
