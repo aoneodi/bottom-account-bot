@@ -47,7 +47,7 @@ def main():
     pyautogui.click(px, py + y_offset)
     time.sleep(1.5)
 
-    for filter_name in ["1bulan", "3bulan"]:
+    for filter_name in s.DATE_FILTERS:
         print(f"Selecting '{filter_name}' + screenshot...")
         s.select_date_filter(filter_name, y_offset=y_offset)
         s.take_screenshot(AKUN, filter_name, y_offset=y_offset)

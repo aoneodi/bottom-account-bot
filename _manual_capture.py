@@ -7,7 +7,7 @@ import sys
 from datetime import datetime
 from PIL import Image
 
-from config import SCREENSHOT_DIR
+from config import SCREENSHOT_DIR, DATE_FILTERS
 from shopee_ads_screenshot import CROP_TOP_LEFT, CROP_BOTTOM_RIGHT
 
 AKUN = sys.argv[1].upper() if len(sys.argv) > 1 else "ALUN-M"
@@ -33,6 +33,6 @@ def capture(filter_name):
     print(f"Saved: {filepath}")
 
 
-capture("1bulan")
-capture("3bulan")
+for _filter in DATE_FILTERS:  # just "1bulan" since 2026-09-16
+    capture(_filter)
 print("Done.")

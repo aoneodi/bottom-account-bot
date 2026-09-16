@@ -30,6 +30,8 @@ Work from `/Users/claudia/bottom-account-automation`.
   ke pojok untuk abort"). It has a 10s countdown, then ~1.5–2 min per brand.
 - Stdout is buffered (not a TTY) so it won't stream live — wait for the background task
   to complete, then read the full output file.
+- Since 2026-09-16 the bot captures **only `1bulan`** (one screenshot per brand — 3 bulan
+  was dropped; see `config.DATE_FILTERS`). Don't expect or hunt for `3bulan` files.
 - Parse the output for two things:
   - the **DONE!** list of saved screenshots (these succeeded), and
   - the **⚠ NOT FOUND** list (skipped — account not held). **STRO-M is a known
@@ -38,9 +40,14 @@ Work from `/Users/claudia/bottom-account-automation`.
 ## Step 2 — Verify (REQUIRED human gate)
 
 - Read and display the saved screenshots inline (`Read` each PNG) so the user sees the
-  grid. For each, confirm: filter label correct (1 Bulan vs 3 bulan), only **Pengeluaran/
-  Biaya Iklan + ROAS** metric cards selected, and the crop framing is clean (date-filter
-  button at top, no "Daftar Semua Iklan Produk" leaking at the bottom).
+  grid. For each, confirm: the date-filter button reads **"1 Bulan Terakhir"** (that's the
+  only range captured now), only **Pengeluaran/Biaya Iklan + ROAS** metric cards selected,
+  and the crop framing is clean (date-filter button at top, no "Daftar Semua Iklan Produk"
+  leaking at the bottom).
+- Shop-switch check: compare each brand's metric numbers against every other brand of the
+  day — near-identical values mean the bot silently stayed on another shop (re-run that
+  brand). There is no 1b-vs-3b self-check anymore, so rely on the button label to confirm
+  the date filter actually took.
 - Flag anything that looks off and name the likely cause from the known failure modes:
   wrong `detect_y_offset` (clipped crop / wrong cards), sticky tab not cleared (wrong
   layout), or stale date coords (same extra metric keeps reappearing).
@@ -51,8 +58,10 @@ Work from `/Users/claudia/bottom-account-automation`.
 
 - Run `python3 insert_to_slides.py <BRANDS...>` for the **successful** brands only
   (exclude any NOT-FOUND brand like STRO-M).
-- Parse the output per brand: template deck (added/deleted), and each meeting deck
+- Parse the output per brand: template deck (1 slide added per brand), and each meeting deck
   (`12BCe2jv…` = "FBI Bottom Account", `1f2QVMCa…` = "FBI Bottom Account (13 Mei 2026)").
+  Only the brand's **1-bulan** Shopee ROAS slide is replaced in the meeting decks; the
+  3-bulan slide is left untouched by design.
   Note any **"No ROAS slides found … skipping"** — those need a manual check (the brand
   has no Shopee ROAS slide pair in that deck).
 

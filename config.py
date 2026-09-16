@@ -8,6 +8,13 @@ MEETING_SLIDES_ID = MEETING_SLIDES_IDS[0]  # back-compat for any old refs
 
 SCREENSHOT_DIR = "screenshots"
 
+# Date ranges captured (and inserted into Slides) per brand, in order.
+# Since 2026-09-16 the Bottom Account meeting only needs "1 bulan terakhir" —
+# 3 bulan was dropped at the user's request. The 3bulan click coords
+# (FILTER_3BULAN) and slide label are still in place, so adding "3bulan" back
+# to this list re-enables it end-to-end.
+DATE_FILTERS = ["1bulan"]
+
 # Email notification
 EMAIL_SENDER = "bot@ahacommerce.net"  # impersonated via service-account domain-wide delegation
 EMAIL_SENDER_NAME = "AHAbot™"  # display name shown on the From line

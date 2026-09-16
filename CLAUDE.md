@@ -1,6 +1,8 @@
 # Bottom Account Automation
 
-Weekly Thursday automation: screenshot Shopee ads performance for underperforming brands and insert the images into Google Slides, one brand per pair of slides.
+Weekly Thursday automation: screenshot Shopee ads performance for underperforming brands and insert the images into Google Slides, one slide per brand.
+
+**Since 2026-09-16 only "1 bulan terakhir" is captured and inserted** — the user dropped "3 bulan terakhir". The active date ranges live in `config.DATE_FILTERS` (currently `["1bulan"]`); every script (bot, insert, rescue, manual capture) loops over that list, and the 3-bulan coords/labels are kept so appending `"3bulan"` re-enables it end-to-end.
 
 ## Context
 
@@ -12,7 +14,7 @@ Weekly Thursday automation: screenshot Shopee ads performance for underperformin
 - `insert_to_slides.py` — Inserts screenshots into both the template deck and meeting deck. Duplicates template slide for template deck; replaces images in-place for meeting deck.
 - `read_brands_from_sheet.py` — Fetches brand list from Google Sheet "Bottom" tab via service account. Skips red-text rows (belum sebulan) and HOL (Lazada-only).
 - `send_email.py` — Sends email notifications via Gmail API (login reminders and success reports).
-- `config.py` — URLs, Slides IDs, email recipients, timing constants.
+- `config.py` — URLs, Slides IDs, email recipients, timing constants, and `DATE_FILTERS` (which date ranges to capture/insert; `["1bulan"]` since 2026-09-16).
 - `brands.csv` — Maps brand `akun` → `shopee_username`. What the bot reads at runtime.
 - `sync_brands_from_sheet.py` — Syncs `brands.csv` from the mapping source of truth (since 2026-08-06): sheet `1s4MAeV0TMoIA8i0t5xHlxsj01j5uDlNmOliIt7biknY` tab **"Monitored Stores"** (A = akun, B = username Shopee, C = kode partner; rows 1–2 are title/header, values need stripping). Appends new brands; username conflicts are reported but NOT overwritten (verified csv values win — the sheet has had stale usernames, e.g. TH.WONE-M). `--dry-run` to preview. The old master-sheet BRAND tab was deleted 2026-08-06.
 - `capture_ref_images.py` / `ref_images/` — Reference images for visual debugging / calibration aids.
@@ -23,7 +25,7 @@ Weekly Thursday automation: screenshot Shopee ads performance for underperformin
 - `_calibrate_date_full.py` — Navigates to a brand's Iklan page + scrolls, THEN runs the date-filter calibration dialogs (use when starting from Pilih Toko). Records `DATE_FILTER_DROPDOWN`, `FILTER_1BULAN`, `FILTER_3BULAN`.
 - `_calibrate_nama_toko.py` / `_calibrate_pilih_toko.py` — Live hover calibration for the Pilih Toko page coords (`NAMA_TOKO_DROPDOWN`, `USERNAME_TOKO_OPTION`, `SEARCH_BOX`, `FIRST_DETAIL_LINK`).
 - `_setup_and_capture.py` — Navigates to a brand's Iklan page, scrolls, takes ONE full screencapture (`/tmp/cards_full.png`) for measuring card centers from the image (more accurate than hover). `_setup_and_track.py` — same nav, then live mouse-position tracker.
-- `_manual_capture.py` — Manual screenshot fallback: dialogs prompt the user to set up the page (correct metrics + filter), bot just screencaptures with the calibrated crop. Use when auto-detect can't recover.
+- `_manual_capture.py` — Manual screenshot fallback: dialogs prompt the user to set up the page (correct metrics + filter), bot just screencaptures with the calibrated crop. Use when auto-detect can't recover. NOTE: the browser must be the visible window when OK is clicked, or it captures whatever is in front (e.g. the terminal).
 - `_rescue_capture.py` — Adaptive-scroll fallback (added 2026-07-23): navigates from Pilih Toko like the normal bot but replaces the fixed `scroll_to_performa` with small scroll steps that re-scan for the two-row card pattern until the cards sit in the crop window (accepts offset −80..+100), plus extra page-load wait. Use for brands whose Iklan page defeats the fixed scroll (e.g. KENL-M: extra Promosi/Misi Penjual sections + slow load push Performa far below the fixed landing point). A large positive offset can pull the macOS Dock into the crop bottom — trim the saved PNGs if needed.
 - `credentials.json` / `token.pickle` — Google OAuth for Slides/Drive (gitignored).
 - `token_gmail.pickle` — Google OAuth for Gmail send (gitignored).
@@ -38,7 +40,7 @@ python3 shopee_ads_screenshot.py --calibrate       # re-record click coords
 python3 insert_to_slides.py BRAND1 BRAND2 ...      # insert latest screenshots to both slide decks
 ```
 
-Brand args are uppercased and must exist in `brands.csv`. Screenshots land in `screenshots/{AKUN}_{1bulan|3bulan}_{YYYYMMDD}.png`.
+Brand args are uppercased and must exist in `brands.csv`. Screenshots land in `screenshots/{AKUN}_{filter}_{YYYYMMDD}.png` where `filter` comes from `config.DATE_FILTERS` (now only `1bulan`; older `3bulan` files from before 2026-09-16 remain in the folder and are ignored by the insert step).
 
 ## Flow (per brand)
 
@@ -54,7 +56,7 @@ User must navigate to Pilih Toko page manually before starting the bot. The bot 
 6. **Force "Semua Iklan Produk" tab**: click `SEMUA_IKLAN_PRODUK_TAB`. Shopee's tab choice is sticky across navigations within a session, so even though `/portal/marketing/pas/index` is the right URL, the page may open on whatever tab was last used (e.g. Iklan Toko). The explicit click is a no-op if already correct.
 7. **Auto-detect y-offset**: scans for the top of row 1 cards (looks for the structural pattern of two long white runs — row 1 and row 2 interiors — separated by a short non-white gap, at the Tayangan column) and computes offset from calibrated `EXPECTED_CARD_TOP_Y`. The offset is then added to all card click positions, date filter clicks, and the screenshot crop region — handles brands where the page has less content above (e.g. ALUN-M, TH.KSB-M) so a fixed scroll lands the Performa section higher than calibrated. If the pattern isn't found (rare), falls back to offset=0.
 8. Smart metric card detection: scans all 8 metric cards for colored top border (selected state). Deselects everything except **Pengeluaran + ROAS** (formerly "Biaya Iklan"). Only clicks cards that need toggling.
-9. For each of `1 bulan terakhir` and `3 bulan terakhir`: open date filter, pick option, screencapture, crop to the Performa region (offset-adjusted), save.
+9. For each filter in `config.DATE_FILTERS` (only `1 bulan terakhir` since 2026-09-16): open date filter, pick option, screencapture, crop to the Performa region (offset-adjusted), save.
 10. Go back to Pilih Toko via Cmd+L + `https://seller.shopee.co.id/portal/shop` (always `.co.id`, even for Thai brands).
 
 ## Domain handling
@@ -76,15 +78,15 @@ User must navigate to Pilih Toko page manually before starting the bot. The bot 
 
 `1Ott0JcNme2979Obe4VpJNQey7Pyr6mP5YNGeK2XiFC4`
 
-Uses a template slide (slide 1) that is duplicated per brand. Template contains:
+Uses a template slide (slide 1) that is duplicated once per brand per date filter — i.e. ONE slide per brand since 2026-09-16. Template contains:
 - **Title placeholder** (top-left): brand name with hyperlink
-- **Subtitle text box** (center-top): "SHO ROAS 1 Bulan Terakhir" / "SHO ROAS 3 Bulan Terakhir", Nunito 22pt bold
+- **Subtitle text box** (center-top): "SHO ROAS 1 Bulan Terakhir" (labels per filter in `FILTER_LABELS`; the 3-bulan label is kept for re-enabling), Nunito 22pt bold
 - **Logo image** (top-right): AHA Commerce logo
 - **Background image**: includes blue bar at bottom
 
 Template IDs are hardcoded in `insert_to_slides.py`. If the template slide is recreated, update `TEMPLATE_SLIDE_ID`, `TEMPLATE_TITLE_ID`, `TEMPLATE_SUBTITLE_ID`, `TEMPLATE_LOGO_ID`, `TEMPLATE_RECT_ID`.
 
-Existing slides for a brand are deleted before insertion (matched by title text = brand code). Images uploaded to Drive with `anyone/reader` permission. Always picks the latest screenshot files (sorted by date suffix).
+Existing slides for a brand are deleted before insertion (matched by title text = brand code) — so any leftover 3-bulan slides from before 2026-09-16 disappear the first time a brand is re-inserted. Images uploaded to Drive with `anyone/reader` permission. Always picks the latest screenshot file per filter (sorted by date suffix).
 
 ### 2. Meeting decks (`MEETING_SLIDES_IDS`)
 
@@ -93,7 +95,7 @@ Two meeting decks share the same structure, and the bot updates both:
 - `12BCe2jvkoG1z01il6bBQRHkW3Z2aOSMUAIKG8JzqFuM` — original "FBI Bottom Account"
 - `1f2QVMCagabXk6RidXLIYhpI6uBCVBougOKs7RPEotCE` — newer "FBI Bottom Account (13 Mei 2026)"
 
-Each has hundreds of slides covering many topics per brand (GMV, harga, stok, profit, ads). Each brand has 4 ROAS slides: first pair = **Shopee**, second pair = **TikTok**. Bot finds and replaces images on the **first pair only** (Shopee). Detection: finds slides with "ROAS" + "Bulan" in text, identifies brand name, takes the first match per filter.
+Each has hundreds of slides covering many topics per brand (GMV, harga, stok, profit, ads). Each brand has 4 ROAS slides: first pair = **Shopee**, second pair = **TikTok**. Bot finds the **first pair only** (Shopee) and, since 2026-09-16, replaces the image on the **1-bulan slide only** — the brand's 3-bulan Shopee slide is not touched, so whatever image it holds stays as-is (stale). Detection: finds slides with "ROAS" + "Bulan" in text, identifies brand name, takes the first match per filter.
 
 `replace_meeting_screenshots()` iterates over `MEETING_SLIDES_IDS` from `config.py` — to add another deck, append its ID there. `MEETING_SLIDES_ID` (singular) is kept as a back-compat alias for `MEETING_SLIDES_IDS[0]`.
 

@@ -14,6 +14,7 @@ from config import (
     CLICK_DELAY,
     SCROLL_DELAY,
     POPUP_WAIT,
+    DATE_FILTERS,
 )
 
 pyautogui.FAILSAFE = True
@@ -34,7 +35,7 @@ SEMUA_IKLAN_PRODUK_TAB = (280, 430)
 # Button center y=446 (measured); option rows ~128/~160 px below the button center.
 DATE_FILTER_DROPDOWN = (1110, 446)
 FILTER_1BULAN = (662, 574)
-FILTER_3BULAN = (662, 606)
+FILTER_3BULAN = (662, 606)  # still calibrated, but unused unless "3bulan" is in config.DATE_FILTERS
 
 # Metric cards (4 per row, evenly spaced)
 # Row 1 (y=564): Tayangan, Produk Terjual, Jumlah Klik, Penjualan dari Iklan
@@ -467,7 +468,8 @@ def process_brand(akun):
             status = "ON" if selected else "OFF"
             print(f"    {name} {status} → OK")
 
-    for filter_name in ["1bulan", "3bulan"]:
+    # Only the filters in config.DATE_FILTERS (just "1bulan" since 2026-09-16).
+    for filter_name in DATE_FILTERS:
         label = "1 bulan" if filter_name == "1bulan" else "3 bulan"
 
         print(f"  7. Selecting '{label}' filter...")

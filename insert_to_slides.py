@@ -8,7 +8,13 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 
-from config import SLIDES_ID, MEETING_SLIDES_ID, MEETING_SLIDES_IDS
+from config import SLIDES_ID, MEETING_SLIDES_ID, MEETING_SLIDES_IDS, DATE_FILTERS
+
+# Subtitle text for the template-deck slide of each date filter.
+FILTER_LABELS = {
+    "1bulan": "SHO ROAS 1 Bulan Terakhir",
+    "3bulan": "SHO ROAS 3 Bulan Terakhir",
+}
 
 SCOPES = [
     "https://www.googleapis.com/auth/presentations",
@@ -101,16 +107,22 @@ def delete_existing_brand_slides(slides_service, brand_akun):
 
 
 def add_brand_slide(slides_service, drive_service, brand_akun, screenshots):
-    print(f"  Uploading screenshots to Drive...")
-    img_urls = [upload_image_to_drive(drive_service, s) for s in screenshots]
+    """Duplicate the template slide once per date filter.
 
-    labels = ["SHO ROAS 1 Bulan Terakhir", "SHO ROAS 3 Bulan Terakhir"]
+    screenshots: {filter_key: image_path}, e.g. {"1bulan": ".../BR_1bulan_20260916.png"}.
+    Only keys listed in config.DATE_FILTERS are used (just "1bulan" since 2026-09-16,
+    so this normally creates ONE slide per brand)."""
+    print(f"  Uploading screenshots to Drive...")
+    items = [
+        (upload_image_to_drive(drive_service, screenshots[key]), FILTER_LABELS[key])
+        for key in DATE_FILTERS if key in screenshots
+    ]
 
     safe_name = brand_akun.replace(".", "_")
     # Iterate in reverse: duplicateObject inserts the new slide directly after
-    # the template, so the last one duplicated ends up on top. Creating 3bulan
-    # first then 1bulan leaves the deck in order [template, 1bulan, 3bulan].
-    for idx, (url, label) in reversed(list(enumerate(zip(img_urls, labels)))):
+    # the template, so the last one duplicated ends up on top. With several
+    # filters this leaves the deck in DATE_FILTERS order right after the template.
+    for idx, (url, label) in reversed(list(enumerate(items))):
         rand = os.urandom(4).hex()
         new_slide_id = f"slide_{safe_name}_{idx}_{rand}"
         new_title_id = f"title_{safe_name}_{idx}_{rand}"
@@ -186,7 +198,7 @@ def add_brand_slide(slides_service, drive_service, brand_akun, screenshots):
             body={"requests": update_requests},
         ).execute()
 
-    print(f"  Added 2 slides for {brand_akun}")
+    print(f"  Added {len(items)} slide(s) for {brand_akun}")
 
 
 def find_sho_roas_slides(slides_service, pres_id):
@@ -237,7 +249,11 @@ def find_sho_roas_slides(slides_service, pres_id):
 
 def replace_meeting_screenshots(slides_service, drive_service, brand_akun, screenshots, meeting_id=None):
     """Replace ad screenshots in a meeting presentation. If meeting_id is None,
-    runs against every deck in MEETING_SLIDES_IDS."""
+    runs against every deck in MEETING_SLIDES_IDS.
+
+    screenshots: {filter_key: image_path}. Only the Shopee ROAS slides whose filter
+    is in config.DATE_FILTERS are touched — since 2026-09-16 that's the 1-bulan
+    slide only; the brand's 3-bulan Shopee slide is left exactly as it is."""
     deck_ids = [meeting_id] if meeting_id else MEETING_SLIDES_IDS
 
     for deck_id in deck_ids:
@@ -249,7 +265,7 @@ def replace_meeting_screenshots(slides_service, drive_service, brand_akun, scree
 
         brand_data = roas_map[brand_akun]
         print(f"  [{deck_id[:8]}…] Uploading screenshots to Drive...")
-        filters = [("1bulan", screenshots[0]), ("3bulan", screenshots[1])]
+        filters = [(key, screenshots[key]) for key in DATE_FILTERS if key in screenshots]
 
         for key, img_path in filters:
             if key not in brand_data:
@@ -316,19 +332,21 @@ def main():
             if f.startswith(f"{akun}_")
         ])
 
-        one_bulan = next((f for f in reversed(files) if "1bulan" in f), None)
-        three_bulan = next((f for f in reversed(files) if "3bulan" in f), None)
+        # Latest file per date filter (files sort by name, date suffix last, so the
+        # last match in sorted order is the newest capture for that filter).
+        screenshots = {}
+        for key in DATE_FILTERS:
+            latest = next((f for f in reversed(files) if f"_{key}_" in f), None)
+            if latest:
+                screenshots[key] = os.path.join(screenshots_dir, latest)
 
-        if not one_bulan or not three_bulan:
-            print(f"Missing screenshots for {akun}, skipping")
-            failed.append((akun, "missing screenshots"))
+        missing = [key for key in DATE_FILTERS if key not in screenshots]
+        if missing:
+            print(f"Missing {'/'.join(missing)} screenshot for {akun}, skipping")
+            failed.append((akun, f"missing screenshots ({', '.join(missing)})"))
             continue
 
-        screenshots = [
-            os.path.join(screenshots_dir, one_bulan),
-            os.path.join(screenshots_dir, three_bulan),
-        ]
-        print(f"\n{akun}: {one_bulan}, {three_bulan}")
+        print(f"\n{akun}: " + ", ".join(os.path.basename(screenshots[k]) for k in DATE_FILTERS))
 
         # Retry the whole brand on transient Slides/Drive API errors (e.g. HTTP
         # 500 "Internal error"). Both steps are idempotent — the template deck
