@@ -1,9 +1,10 @@
 #!/bin/zsh
 # Sends the Shopee login-reminder email with this week's brand list.
-# Invoked by the com.aha.bottom-reminder LaunchAgent at 08:00 every Thursday.
+# Standalone reminder sender. The scheduled path is run_weekly.sh, which sends
+# this same reminder only when its preflight finds the session expired.
 
-PROJECT_DIR="/Users/claudia/bottom-account-automation"
-PYTHON="/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
+PROJECT_DIR="/Users/ahabot/Documents/Claudia/bottom-account-shopee-bot"
+PYTHON="/opt/homebrew/bin/python3"
 LOG_DIR="$PROJECT_DIR/logs"
 mkdir -p "$LOG_DIR"
 STAMP="$(date +%Y%m%d)"

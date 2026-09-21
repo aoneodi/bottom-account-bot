@@ -7,8 +7,9 @@ import sys
 from datetime import datetime
 from PIL import Image
 
+import display
 from config import SCREENSHOT_DIR, DATE_FILTERS
-from shopee_ads_screenshot import CROP_TOP_LEFT, CROP_BOTTOM_RIGHT
+from shopee_ads_screenshot import CROP_TOP_LEFT, CROP_BOTTOM_RIGHT, pad_to_aspect
 
 AKUN = sys.argv[1].upper() if len(sys.argv) > 1 else "ALUN-M"
 timestamp = datetime.now().strftime("%Y%m%d")
@@ -24,12 +25,16 @@ def capture(filter_name):
     tmp_path = os.path.join(SCREENSHOT_DIR, "_tmp_full.png")
     subprocess.run(["screencapture", "-x", tmp_path])
     img = Image.open(tmp_path)
-    x1 = CROP_TOP_LEFT[0] * 2
-    y1 = CROP_TOP_LEFT[1] * 2
-    x2 = CROP_BOTTOM_RIGHT[0] * 2
-    y2 = CROP_BOTTOM_RIGHT[1] * 2
-    img.crop((x1, y1, x2, y2)).save(filepath)
+    cropped, clamped = display.crop_logical(
+        img, CROP_TOP_LEFT[0], CROP_TOP_LEFT[1],
+        CROP_BOTTOM_RIGHT[0], CROP_BOTTOM_RIGHT[1],
+    )
+    pad_to_aspect(cropped).save(filepath)
     os.remove(tmp_path)
+    if clamped:
+        print(f"  ⚠ CROP OUT OF BOUNDS: wanted {CROP_TOP_LEFT}-{CROP_BOTTOM_RIGHT} "
+              f"but the capture is {img.width}x{img.height}px. Image is "
+              f"padded/truncated — re-run --calibrate-crop.")
     print(f"Saved: {filepath}")
 
 

@@ -7,6 +7,8 @@ import sys
 import webbrowser
 from datetime import datetime
 
+import display
+import popups
 from config import (
     SELLER_CENTER_URL,
     SCREENSHOT_DIR,
@@ -20,22 +22,41 @@ from config import (
 pyautogui.FAILSAFE = True
 pyautogui.PAUSE = 0.3
 
-# --- Coordinate map (pyautogui coords for 1710x1112 screen) ---
+# Horizontal centre of the screen. Was hardcoded as 855 (= 1710/2, the old
+# MacBook screen) at every moveTo; derived now so it follows the display.
+SCREEN_CENTRE_X = pyautogui.size()[0] // 2
+
+# Aspect ratio (width / height) the saved screenshot is padded to.
+# insert_to_slides.py drops each new image into the OLD image's box on the
+# meeting decks, so an image whose ratio differs from what those boxes were
+# built for comes out stretched. On the 1920-wide monitor the Performa block is
+# wider than it used to be (raw crop ≈3.01:1 vs the ≈2.56:1 the decks expect),
+# so the crop is padded with white rather than squeezed. The page background
+# around the crop edges is white, so the padding is seamless — and this keeps
+# the decks correct on any future screen without touching hundreds of slides.
+SCREENSHOT_ASPECT = 1407 / 550
+
+# --- Coordinate map (pyautogui LOGICAL coords) ---
+# Calibrated on the 1710x1112 MacBook screen. Every coord below is logical;
+# conversion to screencapture pixels goes through `display` (see display.py),
+# which measures the real scale at runtime instead of assuming Retina 2x.
+# These values still need recalibrating for any screen of a different SIZE —
+# `display` only fixes the scale, not the layout.
 # Pilih Toko page
-SEARCH_BOX = (488, 328)
-FIRST_DETAIL_LINK = (1216, 535)
+SEARCH_BOX = (735, 284)
+FIRST_DETAIL_LINK = (1331, 495)
 
 # Shop dashboard - sidebar
 IKLAN_SHOPEE_MENU = (80, 739)
 
 # Iklan Shopee page (positions after scrolling down)
-SEMUA_IKLAN_PRODUK_TAB = (280, 430)
+SEMUA_IKLAN_PRODUK_TAB = (277, 398)
 # Reference (MON-M, offset 0) date coords; the per-brand y_offset from detect_y_offset
 # is added in select_date_filter so they track each brand's vertical shift.
 # Button center y=446 (measured); option rows ~128/~160 px below the button center.
-DATE_FILTER_DROPDOWN = (1110, 446)
-FILTER_1BULAN = (662, 574)
-FILTER_3BULAN = (662, 606)  # still calibrated, but unused unless "3bulan" is in config.DATE_FILTERS
+DATE_FILTER_DROPDOWN = (1349, 466)
+FILTER_1BULAN = (850, 606)
+FILTER_3BULAN = (850, 638)  # still calibrated, but unused unless "3bulan" is in config.DATE_FILTERS
 
 # Metric cards (4 per row, evenly spaced)
 # Row 1 (y=564): Tayangan, Produk Terjual, Jumlah Klik, Penjualan dari Iklan
@@ -43,27 +64,32 @@ FILTER_3BULAN = (662, 606)  # still calibrated, but unused unless "3bulan" is in
 # NOTE: Shopee renamed cards 2026-06: "Iklan Dilihat"->"Tayangan", "Biaya Iklan"->"Pengeluaran".
 # Order/positions unchanged.
 METRIC_CARDS = {
-    # Measured 2026-06-11 from a live full screencapture (uniform grid, not hover):
-    # columns x=390/742/1094/1446 (≈352px apart), rows y=512/612.
-    "Tayangan":              (390, 512),
-    "Produk Terjual":        (390, 612),
-    "Jumlah Klik":           (742, 512),
-    "Penjualan dari Iklan":  (742, 612),
-    "Persentase Klik":       (1094, 512),
-    "Pengeluaran":           (1094, 612),
-    "Pesanan":               (1446, 512),
-    "ROAS":                  (1446, 612),
+    # Recalibrated 2026-09-21 on the 1920x1080 Mi Monitor, measured from card
+    # BORDERS in a live screencapture (rows y=499..582 and y=599..682; column
+    # borders 222/606, 623/1007, 1024/1407, 1424/1808):
+    # columns x=414/815/1215/1616 (≈401px apart), rows y=540/640 (pitch 100).
+    # NOTE: this Shopee build labels the cards "Iklan Dilihat", "Penjualan" and
+    # "Biaya Iklan" — the 2026-06 rename appears to have been reverted. Only the
+    # POSITIONS matter here; the keys stay as-is so DESIRED_SELECTED still lines up.
+    "Tayangan":              (414, 540),
+    "Produk Terjual":        (414, 640),
+    "Jumlah Klik":           (815, 540),
+    "Penjualan dari Iklan":  (815, 640),
+    "Persentase Klik":       (1215, 540),
+    "Pengeluaran":           (1215, 640),
+    "Pesanan":               (1616, 540),
+    "ROAS":                  (1616, 640),
 }
 DESIRED_SELECTED = {"Pengeluaran", "ROAS"}
 
 
 # Search filter dropdown
-NAMA_TOKO_DROPDOWN = (386, 322)
-USERNAME_TOKO_OPTION = (394, 401)
+NAMA_TOKO_DROPDOWN = (470, 284)
+USERNAME_TOKO_OPTION = (455, 361)
 
 # Screenshot crop region (pyautogui coords)
-CROP_TOP_LEFT = (209, 413)
-CROP_BOTTOM_RIGHT = (1616, 963)
+CROP_TOP_LEFT = (209, 440)
+CROP_BOTTOM_RIGHT = (1820, 975)
 
 # Top-right account menu
 ACCOUNT_BUTTON = (1645, 199)
@@ -96,9 +122,10 @@ def is_card_selected(card_pos, debug_name=None):
     # false positives for cards that are actually off.
     for dy in range(-95, -4):
         for dx in range(-80, 81, 10):
-            px_x = (cx + dx) * 2
-            px_y = (cy + dy) * 2
-            r, g, b = img.getpixel((px_x, px_y))[:3]
+            rgb = display.sample(img, cx + dx, cy + dy)
+            if rgb is None:
+                continue  # sample fell outside the capture — coords are stale
+            r, g, b = rgb
             max_c = max(r, g, b)
             min_c = min(r, g, b)
             saturation = (max_c - min_c) / max_c if max_c > 0 else 0
@@ -113,13 +140,8 @@ def is_card_selected(card_pos, debug_name=None):
         # Save a debug crop centered on the card showing the sample region
         safe_name = debug_name.replace(" ", "_").replace("/", "_")
         dbg_path = os.path.join(SCREENSHOT_DIR, f"_dbg_{safe_name}.png")
-        crop_box = (
-            max(0, (cx - 100) * 2),
-            max(0, (cy - 80) * 2),
-            min(img.width, (cx + 100) * 2),
-            min(img.height, (cy + 20) * 2),
-        )
-        img.crop(crop_box).save(dbg_path)
+        dbg_crop, _ = display.crop_logical(img, cx - 100, cy - 80, cx + 100, cy + 20)
+        dbg_crop.save(dbg_path)
     os.remove(tmp_path)
     return colored_count >= 5
 
@@ -131,6 +153,33 @@ def notify(message):
     ])
 
 
+def pad_to_aspect(img, aspect=None):
+    """Pad `img` with white until it has the given width/height ratio.
+
+    Only ever ADDS white margin — never scales, stretches or crops — so the
+    chart keeps its true proportions while the saved file matches the geometry
+    insert_to_slides.py expects (see SCREENSHOT_ASPECT). Padding is centred, and
+    white because the page background at the crop edges is white, making the
+    seam invisible in the deck.
+    """
+    aspect = SCREENSHOT_ASPECT if aspect is None else aspect
+    w, h = img.size
+    if w <= 0 or h <= 0:
+        return img
+    target_h = round(w / aspect)
+    target_w = round(h * aspect)
+    if target_h >= h:
+        new_w, new_h = w, target_h          # too wide -> add top/bottom margin
+    else:
+        new_w, new_h = target_w, h          # too tall -> add left/right margin
+    if (new_w, new_h) == (w, h):
+        return img
+    from PIL import Image
+    canvas = Image.new("RGB", (new_w, new_h), (255, 255, 255))
+    canvas.paste(img, ((new_w - w) // 2, (new_h - h) // 2))
+    return canvas
+
+
 def take_screenshot(brand_akun, filter_name, y_offset=0):
     timestamp = datetime.now().strftime("%Y%m%d")
     filename = f"{brand_akun}_{filter_name}_{timestamp}.png"
@@ -140,19 +189,34 @@ def take_screenshot(brand_akun, filter_name, y_offset=0):
     # Some brands' flows leave the cursor near the bottom edge, which triggered the
     # Dock to appear in the captured image (seen on TAN-M). The 1.5s sleep below gives
     # the Dock time to retract before the screencapture.
-    pyautogui.moveTo(855, 400)
+    pyautogui.moveTo(SCREEN_CENTRE_X, 400)
     time.sleep(1.5)
     tmp_path = os.path.join(SCREENSHOT_DIR, "_tmp_full.png")
     subprocess.run(["screencapture", "-x", tmp_path])
     from PIL import Image
     img = Image.open(tmp_path)
-    x1 = CROP_TOP_LEFT[0] * 2
-    y1 = (CROP_TOP_LEFT[1] + y_offset) * 2
-    x2 = CROP_BOTTOM_RIGHT[0] * 2
-    y2 = (CROP_BOTTOM_RIGHT[1] + y_offset) * 2
-    cropped = img.crop((x1, y1, x2, y2))
-    cropped.save(filepath)
+    cropped, clamped = display.crop_logical(
+        img,
+        CROP_TOP_LEFT[0],
+        CROP_TOP_LEFT[1] + y_offset,
+        CROP_BOTTOM_RIGHT[0],
+        CROP_BOTTOM_RIGHT[1] + y_offset,
+    )
+    padded = pad_to_aspect(cropped)
+    padded.save(filepath)
     os.remove(tmp_path)
+    if padded.size != cropped.size:
+        print(f"  Padded {cropped.width}x{cropped.height} -> "
+              f"{padded.width}x{padded.height} to keep the deck's aspect ratio")
+    if clamped:
+        # The crop reached outside the capture. PIL pads that with black, so
+        # without this the run would look successful and a part-black image
+        # would land in both meeting decks. Loud, because it means CROP_* no
+        # longer matches this display and needs --calibrate-crop.
+        print(f"  ⚠ CROP OUT OF BOUNDS for {brand_akun} {filter_name}: wanted "
+              f"{CROP_TOP_LEFT}-{CROP_BOTTOM_RIGHT} (+{y_offset}) but the capture "
+              f"is {img.width}x{img.height}px. Image is padded/truncated — "
+              f"re-run --calibrate-crop. DO NOT insert this into the decks.")
     print(f"  Saved: {filepath}")
     return filepath
 
@@ -201,7 +265,10 @@ def detail_link_present(akun=None, retries=2):
         blue = 0
         for dy in range(-14, 15):
             for dx in range(-55, 56):
-                r, g, b = img.getpixel(((cx + dx) * 2, (cy + dy) * 2))[:3]
+                rgb = display.sample(img, cx + dx, cy + dy)
+                if rgb is None:
+                    continue  # outside the capture — coords stale for this display
+                r, g, b = rgb
                 # Shopee link blue (~#2673dd): strong blue, weak red.
                 if b > 170 and b - r > 60 and b - g > 30 and r < 140:
                     blue += 1
@@ -284,7 +351,10 @@ def is_popup_present():
     sample_points = [(400, 900), (1400, 900), (400, 300)]
     dim_count = 0
     for x, y in sample_points:
-        r, g, b = img.getpixel((x * 2, y * 2))[:3]
+        rgb = display.sample(img, x, y)
+        if rgb is None:
+            continue
+        r, g, b = rgb
         if r < 80 and g < 80 and b < 80:
             dim_count += 1
     os.remove(tmp_path)
@@ -293,6 +363,24 @@ def is_popup_present():
 
 def close_popup():
     time.sleep(POPUP_WAIT)
+
+    # Registered popups first. is_popup_present() only sees a DIMMED backdrop,
+    # so light-backdrop promo cards are invisible to it and Escape does not
+    # close them anyway — they have an X. popups.dismiss() finds the card by
+    # template match (tolerating the ~15px shift it drifts by) and clicks it.
+    if popups.dismiss():
+        time.sleep(CLICK_DELAY)
+
+    # Then proper modals: a dimmed page with a dialog over it, closed by the X in
+    # its top-right corner. is_popup_present() below only counts a backdrop as
+    # dimmed at r,g,b < 80; the 2026-09-21 "Optimalkan Iklan" modal dimmed the
+    # page to 142-153, was reported as "No popup detected", and every metric-card
+    # click landed on the dialog — the run saved a screenshot of the wrong
+    # metrics for ALUN-M. This check is generic, so it also covers modals that
+    # are not registered individually.
+    if popups.dismiss_modal():
+        time.sleep(CLICK_DELAY)
+
     if not is_popup_present():
         print("    No popup detected, continuing...")
         return
@@ -306,6 +394,11 @@ def close_popup():
     if not is_popup_present():
         print("    Popup closed with second Escape")
         return
+    # Unknown popup that Escape will not shift: capture it before handing over,
+    # so it can be registered in popups.py and handled automatically next time.
+    display.save_debug_shot("unknown_popup")
+    print("    → Unrecognised popup. Add it to popups.py using that frame "
+          "(see the ADDING A NEW POPUP notes there).")
     subprocess.run([
         "osascript", "-e",
         'display dialog "Popup still open — please close it, then click OK." with title "Shopee Ads Bot" buttons {"OK"} default button "OK" with icon caution'
@@ -313,7 +406,7 @@ def close_popup():
 
 
 def select_date_filter(filter_name, y_offset=0):
-    pyautogui.moveTo(855, 400)
+    pyautogui.moveTo(SCREEN_CENTRE_X, 400)
     time.sleep(0.5)
     pyautogui.click(DATE_FILTER_DROPDOWN[0], DATE_FILTER_DROPDOWN[1] + y_offset)
     time.sleep(2)
@@ -325,7 +418,7 @@ def select_date_filter(filter_name, y_offset=0):
 
 
 def scroll_to_performa():
-    pyautogui.moveTo(855, 500)
+    pyautogui.moveTo(SCREEN_CENTRE_X, 500)
     time.sleep(0.5)
     pyautogui.scroll(-7)
     time.sleep(SCROLL_DELAY)
@@ -337,7 +430,49 @@ def scroll_to_performa():
 
 # Calibrated row-1 card top edge (logical y) on the reference brand (MON-M, offset 0).
 # Used as anchor for auto-detect. Measured 2026-06-16 from a live full screencapture.
-EXPECTED_CARD_TOP_Y = 471
+EXPECTED_CARD_TOP_Y = 500
+
+# White-run signature of the two metric-card rows, all in LOGICAL px. These were
+# previously written as screen px assuming Retina 2x (scan 400..1800, run >= 120,
+# pitch 180..220, run 130..200); halving them gives the logical values below, which
+# `display.px` converts back to whatever the current screen actually uses.
+# _rescue_capture.py imports these so both detectors re-tune from one place.
+CARD_SCAN_TOP_Y = 200           # start scanning below the page header
+CARD_SCAN_BOTTOM_Y = 900        # stop before the chart/axis area
+CARD_RUN_MIN = 60               # a run this long is a candidate card interior
+CARD_RUN_LO, CARD_RUN_HI = 65, 100    # card interior height (~82 logical px)
+CARD_PITCH_LO, CARD_PITCH_HI = 90, 110  # row1 top -> row2 top (~100 logical px)
+
+
+def _white_runs(img, x_logical):
+    """Vertical runs of white at a logical column, as (top, length) in LOGICAL px.
+
+    Scans at the capture's native resolution and converts the results, so the
+    scan keeps full precision on a Retina panel while the thresholds around it
+    stay in one screen-independent unit.
+    """
+    x_screen = display.px(x_logical)
+    if not (0 <= x_screen < img.width):
+        return []
+    y_start = max(0, display.px(CARD_SCAN_TOP_Y))
+    y_end = min(display.px(CARD_SCAN_BOTTOM_Y), img.height)
+    runs = []
+    in_white = False
+    white_start = None
+    for y in range(y_start, y_end):
+        r, g, b = img.getpixel((x_screen, y))[:3]
+        is_white = r > 248 and g > 248 and b > 248
+        if is_white and not in_white:
+            in_white = True
+            white_start = y
+        elif not is_white and in_white:
+            runs.append((display.to_logical(white_start),
+                         display.to_logical(y - white_start)))
+            in_white = False
+    if in_white:
+        runs.append((display.to_logical(white_start),
+                     display.to_logical(y_end - white_start)))
+    return runs
 
 
 def detect_y_offset():
@@ -345,8 +480,8 @@ def detect_y_offset():
     Positive = cards lower than reference; negative = higher.
 
     Robust detection (rewritten 2026-06-16): the two metric-card rows each show a tall
-    (~164 screen px) white interior, and their tops are exactly ~200 screen px apart
-    (the 100-logical row pitch). We scan a CLEAN white column inside the cards — the
+    (~82 logical px) white interior, and their tops are exactly ~100 logical px apart
+    (the row pitch). We scan a CLEAN white column inside the cards — the
     RIGHT portion of the Tayangan card, past the name/value text which broke the old
     scan at the card center — collect long white runs, and find the pair separated by
     the row pitch. The first run's top = row-1 card top. Whitespace above the cards has
@@ -356,33 +491,17 @@ def detect_y_offset():
     subprocess.run(["screencapture", "-x", tmp_path])
     from PIL import Image
     img = Image.open(tmp_path)
-    _, height = img.size
 
     # Try a few clean columns in the Tayangan card's white right portion (logical x).
     for x_logical in (500, 480, 520, 460):
-        x_screen = x_logical * 2
-        runs = []
-        in_white = False
-        white_start = None
-        for y in range(400, min(1800, height)):
-            r, g, b = img.getpixel((x_screen, y))[:3]
-            is_white = r > 248 and g > 248 and b > 248
-            if is_white and not in_white:
-                in_white = True
-                white_start = y
-            elif not is_white and in_white:
-                runs.append((white_start, y, y - white_start))
-                in_white = False
-        if in_white:
-            runs.append((white_start, min(1800, height), min(1800, height) - white_start))
-
-        # Card interiors are ~164 screen px tall; row1/row2 tops are ~200 screen px apart.
-        longs = [(s, e, l) for s, e, l in runs if l >= 120]
+        longs = [(s, l) for s, l in _white_runs(img, x_logical) if l >= CARD_RUN_MIN]
         for i in range(len(longs)):
             for j in range(i + 1, len(longs)):
                 pitch = longs[j][0] - longs[i][0]
-                if 180 <= pitch <= 220 and 130 <= longs[i][2] <= 200 and 130 <= longs[j][2] <= 200:
-                    actual_top_logical = longs[i][0] // 2
+                if (CARD_PITCH_LO <= pitch <= CARD_PITCH_HI
+                        and CARD_RUN_LO <= longs[i][1] <= CARD_RUN_HI
+                        and CARD_RUN_LO <= longs[j][1] <= CARD_RUN_HI):
+                    actual_top_logical = longs[i][0]
                     offset = actual_top_logical - EXPECTED_CARD_TOP_Y
                     if abs(offset) > 120:  # implausible — refuse rather than cascade
                         break
@@ -393,6 +512,11 @@ def detect_y_offset():
 
     os.remove(tmp_path)
     print("    Could not detect card position, assuming offset=0")
+    # Since the 2026-09-21 recalibration this path is NOT the normal case any
+    # more (it used to fire on every brand), so reaching it means something is
+    # genuinely off — a popup over the cards, a layout shift, a half-loaded
+    # page. Keep the frame; offset=0 may well produce a wrong crop.
+    display.save_debug_shot("offset_detect_failed")
     return 0
 
 
@@ -467,6 +591,20 @@ def process_brand(akun):
         else:
             status = "ON" if selected else "OFF"
             print(f"    {name} {status} → OK")
+
+    # Verify the toggles actually took. A click that misses (stale coords, a
+    # popup swallowing it, the page reflowing mid-loop) leaves the chart showing
+    # the wrong metrics, and the screenshot still looks plausible — so the wrong
+    # chart would go into both decks unnoticed. Check, and keep the frame.
+    wrong = [n for n, pos in cards_adjusted.items()
+             if is_card_selected(pos) != (n in DESIRED_SELECTED)]
+    if wrong:
+        print(f"  ⚠ METRICS NOT AS REQUESTED for {akun}: {', '.join(wrong)} "
+              f"still wrong after toggling (want only "
+              f"{', '.join(sorted(DESIRED_SELECTED))}).")
+        display.save_debug_shot(f"metrics_{akun}")
+    else:
+        print(f"    Verified: only {', '.join(sorted(DESIRED_SELECTED))} selected")
 
     # Only the filters in config.DATE_FILTERS (just "1bulan" since 2026-09-16).
     for filter_name in DATE_FILTERS:

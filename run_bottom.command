@@ -6,8 +6,8 @@
 # IMPORTANT: log in to Shopee and be on the "Pilih Toko" page BEFORE the 10s
 # countdown ends — the bot drives whatever browser tab is in front.
 
-PROJECT_DIR="/Users/claudia/bottom-account-automation"
-PY="/Library/Frameworks/Python.framework/Versions/3.13/bin/python3"
+PROJECT_DIR="/Users/ahabot/Documents/Claudia/bottom-account-shopee-bot"
+PY="/opt/homebrew/bin/python3"
 
 cd "$PROJECT_DIR" || { echo "Project dir not found: $PROJECT_DIR"; read "?Press Enter to close..."; exit 1; }
 

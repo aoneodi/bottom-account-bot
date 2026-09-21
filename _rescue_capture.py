@@ -23,27 +23,15 @@ MAX_SCROLL_STEPS = 24         # x2 ticks each = up to -48 ticks total
 ACCEPT_MIN, ACCEPT_MAX = -80, 100  # acceptable offset range vs EXPECTED_CARD_TOP_Y
 
 
-def _white_runs(img, x_screen, height):
-    runs = []
-    in_white = False
-    white_start = None
-    for y in range(400, min(1800, height)):
-        r, g, b = img.getpixel((x_screen, y))[:3]
-        is_white = r > 248 and g > 248 and b > 248
-        if is_white and not in_white:
-            in_white = True
-            white_start = y
-        elif not is_white and in_white:
-            runs.append((white_start, y - white_start))
-            in_white = False
-    if in_white:
-        runs.append((white_start, min(1800, height) - white_start))
-    return runs
-
-
 # Text-free right sides of the Jumlah Klik and ROAS cards. Real metric cards are
 # a uniform grid, so their run tops align across columns; Rekomendasi cards don't.
 VERIFY_COLS = (860, 1560)
+
+# Alignment tolerance and verify-column run height, in LOGICAL px (were 12 and
+# 130..230 screen px under the old Retina-2x assumption). The rest of the
+# signature comes from the bot so both detectors re-tune from one place.
+ALIGN_TOLERANCE = 6
+VERIFY_RUN_LO, VERIFY_RUN_HI = 65, 115
 
 
 def find_card_top():
@@ -56,25 +44,25 @@ def find_card_top():
     tmp_path = os.path.join(SCREENSHOT_DIR, "_tmp_rescue.png")
     subprocess.run(["screencapture", "-x", tmp_path])
     img = Image.open(tmp_path)
-    _, height = img.size
     try:
         for x_logical in (500, 480, 520, 460):
-            longs = [(s, l) for s, l in _white_runs(img, x_logical * 2, height)
-                     if l >= 120]
+            longs = [(s, l) for s, l in bot._white_runs(img, x_logical)
+                     if l >= bot.CARD_RUN_MIN]
             for i in range(len(longs)):
                 for j in range(i + 1, len(longs)):
                     pitch = longs[j][0] - longs[i][0]
-                    if not (180 <= pitch <= 220
-                            and 130 <= longs[i][1] <= 200
-                            and 130 <= longs[j][1] <= 200):
+                    if not (bot.CARD_PITCH_LO <= pitch <= bot.CARD_PITCH_HI
+                            and bot.CARD_RUN_LO <= longs[i][1] <= bot.CARD_RUN_HI
+                            and bot.CARD_RUN_LO <= longs[j][1] <= bot.CARD_RUN_HI):
                         continue
                     top = longs[i][0]
                     aligned = all(
-                        any(abs(s - top) <= 12 and 130 <= l <= 230
-                            for s, l in _white_runs(img, vx * 2, height))
+                        any(abs(s - top) <= ALIGN_TOLERANCE
+                            and VERIFY_RUN_LO <= l <= VERIFY_RUN_HI
+                            for s, l in bot._white_runs(img, vx))
                         for vx in VERIFY_COLS)
                     if aligned:
-                        return top // 2 - bot.EXPECTED_CARD_TOP_Y
+                        return top - bot.EXPECTED_CARD_TOP_Y
         return None
     finally:
         os.remove(tmp_path)

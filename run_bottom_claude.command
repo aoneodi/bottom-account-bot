@@ -12,8 +12,8 @@
 # BEFORE you press Enter. Don't touch the mouse/keyboard once the bot's 10s
 # countdown starts; slam the mouse to a screen corner to abort.
 
-cd "/Users/claudia/bottom-account-automation" || {
+cd "/Users/ahabot/Documents/Claudia/bottom-account-shopee-bot" || {
   echo "Project dir not found."; read "?Press Enter to close..."; exit 1;
 }
 
-exec /Users/claudia/.local/bin/claude "/bottom-run"
+exec /Users/ahabot/.local/bin/claude "/bottom-run"

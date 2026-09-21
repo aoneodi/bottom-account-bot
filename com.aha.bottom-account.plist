@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.aha.bottom-account</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/ahabot/Applications/Bottom Account Run.app/Contents/MacOS/bottom-account-run</string>
+	</array>
+	<!-- Runs through an .app bundle, NOT /bin/zsh directly: macOS attributes
+	     Screen Recording / Accessibility to the responsible process, and a bare
+	     zsh job cannot screencapture ("could not create image from display",
+	     verified 2026-09-21). Same pattern as com.aha.priceguard.tick.
+	     Weekday 4 = Thursday. Fires every 15 min from 07:30 to 09:00; each tick
+	     is idempotent and exits at once if the run already succeeded today, so
+	     the user only has to log in when the reminder email arrives. -->
+	<key>StartCalendarInterval</key>
+	<array>
+			<dict>
+				<key>Weekday</key><integer>4</integer>
+				<key>Hour</key><integer>7</integer>
+				<key>Minute</key><integer>30</integer>
+			</dict>
+			<dict>
+				<key>Weekday</key><integer>4</integer>
+				<key>Hour</key><integer>7</integer>
+				<key>Minute</key><integer>45</integer>
+			</dict>
+			<dict>
+				<key>Weekday</key><integer>4</integer>
+				<key>Hour</key><integer>8</integer>
+				<key>Minute</key><integer>0</integer>
+			</dict>
+			<dict>
+				<key>Weekday</key><integer>4</integer>
+				<key>Hour</key><integer>8</integer>
+				<key>Minute</key><integer>15</integer>
+			</dict>
+			<dict>
+				<key>Weekday</key><integer>4</integer>
+				<key>Hour</key><integer>8</integer>
+				<key>Minute</key><integer>30</integer>
+			</dict>
+			<dict>
+				<key>Weekday</key><integer>4</integer>
+				<key>Hour</key><integer>8</integer>
+				<key>Minute</key><integer>45</integer>
+			</dict>
+			<dict>
+				<key>Weekday</key><integer>4</integer>
+				<key>Hour</key><integer>9</integer>
+				<key>Minute</key><integer>0</integer>
+			</dict>
+	</array>
+	<key>RunAtLoad</key>
+	<false/>
+	<key>StandardOutPath</key>
+	<string>/Users/ahabot/Documents/Claudia/bottom-account-shopee-bot/logs/launchd.out.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/ahabot/Documents/Claudia/bottom-account-shopee-bot/logs/launchd.err.log</string>
+</dict>
+</plist>
