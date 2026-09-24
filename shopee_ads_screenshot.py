@@ -83,6 +83,79 @@ METRIC_CARDS = {
 DESIRED_SELECTED = {"Pengeluaran", "ROAS"}
 
 
+# Calibrated top edge of the Pilih Toko filter/search control box (logical y).
+# The box is ~31px tall; its top is the anchor for detect_page_y_offset().
+EXPECTED_FILTER_BOX_TOP = 269
+FILTER_BOX_HEIGHT_LO, FILTER_BOX_HEIGHT_HI = 26, 38
+FILTER_BOX_PROBE_X = 800          # empty part of the search input, right of "Cari"
+
+
+def detect_page_y_offset():
+    """How far the Pilih Toko page sits below where it was calibrated.
+
+    Chrome's toolbar height changes when the bookmarks bar is shown or hidden,
+    and that moves every element on the page. On 2026-09-24 the bar reappeared
+    between runs and shifted the page +34px: the filter-dropdown click landed
+    above the control, the filter stayed on "Nama Toko", no search ever ran,
+    and ALL 23 brands reported "not found on Pilih Toko" — including four that
+    had captured cleanly three days earlier. Nothing detected it, because every
+    step still "worked"; only the results were empty.
+
+    Rather than depending on a browser setting staying put, measure it: the
+    control box is the topmost pair of ink rows the right-hand (text-free) part
+    of the search input crosses. Returns the offset, or None if the page does
+    not look like Pilih Toko.
+    """
+    tmp_path = os.path.join(SCREENSHOT_DIR, "_tmp_pagey.png")
+    subprocess.run(["screencapture", "-x", tmp_path])
+    from PIL import Image
+    img = Image.open(tmp_path)
+    img.load()
+    os.remove(tmp_path)
+
+    rows = []
+    for y in range(EXPECTED_FILTER_BOX_TOP - 80, EXPECTED_FILTER_BOX_TOP + 140):
+        rgb = display.sample(img, FILTER_BOX_PROBE_X, y)
+        if rgb is None:
+            continue
+        r, g, b = rgb
+        if not (r > 240 and g > 240 and b > 240):
+            rows.append(y)
+
+    for i in range(len(rows) - 1):
+        for j in range(i + 1, len(rows)):
+            h = rows[j] - rows[i]
+            if FILTER_BOX_HEIGHT_LO <= h <= FILTER_BOX_HEIGHT_HI:
+                return rows[i] - EXPECTED_FILTER_BOX_TOP
+            if h > FILTER_BOX_HEIGHT_HI:
+                break
+    return None
+
+
+# Added to every Pilih Toko coordinate; re-measured before each search attempt,
+# since the bookmarks bar can be toggled part-way through a run.
+PAGE_Y_OFFSET = 0
+
+
+def refresh_page_y_offset(verbose=True):
+    """Re-measure the Pilih Toko offset and keep it if the page is recognisable."""
+    global PAGE_Y_OFFSET
+    off = detect_page_y_offset()
+    if off is None:
+        if verbose:
+            print(f"    Page offset not measurable — keeping {PAGE_Y_OFFSET:+d}")
+        return PAGE_Y_OFFSET
+    if off != PAGE_Y_OFFSET and verbose:
+        print(f"    Pilih Toko page offset {PAGE_Y_OFFSET:+d} -> {off:+d}")
+    PAGE_Y_OFFSET = off
+    return off
+
+
+def _pt(coord):
+    """A Pilih Toko coordinate, shifted by the measured page offset."""
+    return (coord[0], coord[1] + PAGE_Y_OFFSET)
+
+
 # Search filter dropdown
 NAMA_TOKO_DROPDOWN = (470, 284)
 USERNAME_TOKO_OPTION = (455, 361)
@@ -222,14 +295,14 @@ def take_screenshot(brand_akun, filter_name, y_offset=0):
 
 
 def select_username_filter():
-    pyautogui.click(*NAMA_TOKO_DROPDOWN)
+    pyautogui.click(*_pt(NAMA_TOKO_DROPDOWN))
     time.sleep(CLICK_DELAY)
-    pyautogui.click(*USERNAME_TOKO_OPTION)
+    pyautogui.click(*_pt(USERNAME_TOKO_OPTION))
     time.sleep(CLICK_DELAY)
 
 
 def search_shop(username):
-    pyautogui.click(*SEARCH_BOX)
+    pyautogui.click(*_pt(SEARCH_BOX))
     time.sleep(CLICK_DELAY)
     pyautogui.hotkey("command", "a")
     time.sleep(0.2)
@@ -255,7 +328,7 @@ def detail_link_present(akun=None, retries=2):
     actually showed (popup? empty table? wrong filter?).
     """
     from PIL import Image
-    cx, cy = FIRST_DETAIL_LINK
+    cx, cy = _pt(FIRST_DETAIL_LINK)
     last_img = None
     for attempt in range(retries):
         tmp_path = os.path.join(SCREENSHOT_DIR, "_tmp_detail.png")
@@ -307,6 +380,7 @@ def search_and_verify(akun, username, attempts=3):
         # RE-NAVIGATES to Pilih Toko (go_back_to_pilih_toko dismisses popups with
         # Escape first) before selecting the filter and searching again.
         go_back_to_pilih_toko()
+        refresh_page_y_offset()
         select_username_filter()
         search_shop(username)
         if detail_link_present(akun):
@@ -318,7 +392,7 @@ def search_and_verify(akun, username, attempts=3):
 
 
 def click_first_detail():
-    pyautogui.click(*FIRST_DETAIL_LINK)
+    pyautogui.click(*_pt(FIRST_DETAIL_LINK))
     time.sleep(PAGE_LOAD_WAIT)
 
 

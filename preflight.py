@@ -158,6 +158,15 @@ def main():
             f"environment problem, not a login problem")
         return 2
 
+    # Report the page offset. The bookmarks bar reappearing on 2026-09-24 moved
+    # the whole page +34px and cost a full Thursday run; the bot now measures
+    # and compensates, but surfacing it here makes the cause obvious in the log.
+    import shopee_ads_screenshot as bot
+    off = bot.detect_page_y_offset()
+    log(f"  preflight: Pilih Toko page offset = "
+        f"{'not measurable' if off is None else format(off, '+d')}"
+        + (" (bookmarks bar or a Chrome toolbar change)" if off else ""))
+
     blue = shop_table_visible()
     log(f"  preflight: {blue} blue pixels in the Aksi column")
     if blue < 30:
