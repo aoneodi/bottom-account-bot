@@ -48,6 +48,20 @@ KNOWN_POPUPS = [
         "threshold": 18.0,                  # max mean abs channel difference
         "close_offset": (37, -55),          # X, relative to the template's top-left
     },
+    {
+        "name": "Gratis Ongkir XTRA program update",
+        # Centred modal on the Iklan page with an orange banner, and NO X — only
+        # "Ingatkan Saya Nanti" and "Setuju". It blocked DGLV-M, PLEN.SBY-M and
+        # QM-M on 2026-09-24; the generic handler logged "no close X found" and
+        # left it, so all three captured the wrong page.
+        # The close target is "Ingatkan Saya Nanti". "Setuju" enrols the shop in
+        # a paid programme and sits 96px to the right — safe_to_click() refuses
+        # the click outright if the target has drifted onto that orange button.
+        "template": "popup_gratis_ongkir_xtra.png",   # the orange XTRA banner
+        "search": (600, 250, 1350, 700),
+        "threshold": 18.0,
+        "close_offset": (142, 449),        # "Ingatkan Saya Nanti", from banner top-left
+    },
 ]
 
 REF_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "ref_images")
@@ -141,6 +155,30 @@ def identify(img=None):
             dx, dy = spec["close_offset"]
             return spec, score, (x + dx, y + dy)
     return None
+
+
+def safe_to_click(img, x, y, radius=22):
+    """False if the target sits on (or beside) a Shopee primary-action button.
+
+    Shopee paints affirmative actions — "Setuju", "Aktifkan", "Gabung Sekarang"
+    — in brand orange, and they enrol the shop in paid programmes on a client's
+    account. Dismissive actions ("Ingatkan Saya Nanti", a plain X) are white or
+    outlined grey. So the bot may click a dismissal but must never click orange:
+    a close target that has drifted onto one is refused instead.
+
+    Seen 2026-09-24: the "Gratis Ongkir XTRA" modal puts "Ingatkan Saya Nanti"
+    and "Setuju" 35px apart. Automating a dismissal there is only acceptable
+    with this interlock in front of it.
+    """
+    for dy in range(-radius // 2, radius // 2 + 1, 3):
+        for dx in range(-radius, radius + 1, 3):
+            rgb = display.sample(img, x + dx, y + dy)
+            if rgb is None:
+                continue
+            r, g, b = rgb
+            if r > 195 and g < 140 and b < 130 and r - g > 65:
+                return False
+    return True
 
 
 # --- Generic modal handling -------------------------------------------------
@@ -255,6 +293,11 @@ def dismiss_modal(verbose=True):
         if verbose:
             print(f"    Modal at {box} but no close X found — leaving it")
         return False
+    if not safe_to_click(img, *target):
+        if verbose:
+            print(f"    ⚠ Modal at {box}: close target {target} sits on an "
+                  f"orange (affirmative) button — REFUSING to click it")
+        return False
     if verbose:
         print(f"    Modal at {box}, clicking its X at {target}")
     pyautogui.click(*target)
@@ -281,6 +324,11 @@ def dismiss(rounds=3, verbose=True):
         if not found:
             break
         spec, score, target = found
+        if not safe_to_click(_capture(), *target):
+            if verbose:
+                print(f"    ⚠ {spec['name']}: close target {target} sits on an "
+                      f"orange (affirmative) button — REFUSING to click it")
+            break
         if verbose:
             print(f"    Known popup: {spec['name']} (match {score:.1f}), "
                   f"clicking close at {target}")
