@@ -330,6 +330,19 @@ Wired into **both** exit paths of `run_weekly.sh` — including the screenshots-
 
 `--dry-run` prints the email instead of sending it; `--subject-prefix` tags non-production runs.
 
+## Drive uploads
+
+`insert_to_slides.py` uploads each screenshot so Slides has a URL to fetch. Two things about that were wrong until 2026-09-28:
+
+- Files landed in **My Drive's root** with no structure. They now go to `Bottom Account Screenshots / YYYY-MM-DD /`.
+- The `anyone/reader` grant was **never revoked**, so 2048 images carrying client ROAS, ad spend and revenue were readable by anyone with the link, accumulating since May. `revoke_public_access()` now drops it at the end of the run.
+
+Revoking is safe because **Slides does not read from Drive after insertion** — its `contentUrl` points at its own copy (`lh7-rt…/slidesz/`) and `sourceUrl` is kept only as provenance. Verified by revoking access on a live file and re-rendering the slide byte-identically. The old 2048 files were revoked and trashed the same day.
+
+The same screenshot used to be uploaded once per deck — three times per brand, the source of 679 of 1081 redundant copies. `_url_cache` makes it once per run.
+
+When `GCS_BUCKET` is set the Drive path is bypassed entirely in favour of a private bucket and a 30-minute signed URL; see **gcs_upload.py**.
+
 ## Gotchas
 
 - **Pilih Toko search is a SUBSTRING match.** Searching `woonae` returns the shop whose username is `woonae_official_shop`. So a slightly-wrong-but-prefix username still works, which is why a stale mapping can hide for months. The flip side is diagnostic: a `Shop (0) — Toko tidak ditemukan` result is therefore strong evidence the shop genuinely is not on this account, not merely that the username is a bit off (seen 2026-09-21 for LEAG-M, TH.KSB-M, KENL-M).

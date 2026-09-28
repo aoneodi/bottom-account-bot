@@ -94,9 +94,68 @@ def image_url_for(drive_service, image_path):
     return url
 
 
+DRIVE_FOLDER_NAME = "Bottom Account Screenshots"
+_folder_cache = {}
+_uploaded_ids = []          # public permissions to revoke once the run is done
+
+
+def _drive_folder(drive_service, name, parent=None):
+    """Find or create a Drive folder, cached per run."""
+    key = (name, parent)
+    if key in _folder_cache:
+        return _folder_cache[key]
+    q = ("mimeType='application/vnd.google-apps.folder' and trashed=false "
+         f"and name='{name}'")
+    if parent:
+        q += f" and '{parent}' in parents"
+    hits = drive_service.files().list(q=q, fields="files(id)",
+                                      pageSize=1).execute().get("files", [])
+    if hits:
+        fid = hits[0]["id"]
+    else:
+        body = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
+        if parent:
+            body["parents"] = [parent]
+        fid = drive_service.files().create(body=body, fields="id").execute()["id"]
+    _folder_cache[key] = fid
+    return fid
+
+
+def revoke_public_access(drive_service):
+    """Drop the anyone-with-link permission from everything uploaded this run.
+
+    Slides fetches each image once at insert time and then serves its OWN copy
+    (its contentUrl points at lh7-rt…/slidesz/, and sourceUrl is kept only as
+    provenance) — verified 2026-09-28 by revoking access on a live file and
+    re-rendering the slide byte-identically. So the public grant is needed for
+    minutes, not forever.
+
+    Leaving it in place is what put 2048 images carrying client ROAS, ad spend
+    and revenue behind guessable links, accumulating since May.
+    """
+    done = 0
+    for fid in _uploaded_ids:
+        try:
+            drive_service.permissions().delete(
+                fileId=fid, permissionId="anyoneWithLink").execute()
+            done += 1
+        except Exception:
+            pass                      # already gone, or never granted
+    if _uploaded_ids:
+        print(f"  Revoked public access on {done}/{len(_uploaded_ids)} "
+              f"uploaded images")
+    return done
+
+
 def upload_image_to_drive(drive_service, image_path):
     filename = os.path.basename(image_path)
-    file_metadata = {"name": filename}
+    # One folder per run date under a single parent, so Drive stops filling its
+    # root: Bottom Account Screenshots / YYYY-MM-DD / <AKUN>_<filter>_<date>.png
+    stamp = filename.rsplit("_", 1)[-1].split(".")[0]
+    day = f"{stamp[:4]}-{stamp[4:6]}-{stamp[6:8]}" if len(stamp) == 8 else stamp
+    root = _drive_folder(drive_service, DRIVE_FOLDER_NAME)
+    folder = _drive_folder(drive_service, day, parent=root)
+    file_metadata = {"name": filename, "parents": [folder]}
     media = MediaFileUpload(image_path, mimetype="image/png")
     file = drive_service.files().create(
         body=file_metadata,
@@ -104,6 +163,7 @@ def upload_image_to_drive(drive_service, image_path):
         fields="id",
     ).execute()
     file_id = file.get("id")
+    _uploaded_ids.append(file_id)
 
     drive_service.permissions().create(
         fileId=file_id,
@@ -410,6 +470,8 @@ def main():
         if not success:
             failed.append((akun, "API error after retries"))
             print(f"  ✗ {akun} FAILED after retries — needs manual redo")
+
+    revoke_public_access(drive_service)
 
     print("\nDone! Check your Google Slides.")
     if failed:
