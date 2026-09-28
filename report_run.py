@@ -21,12 +21,15 @@ import os
 import re
 from datetime import datetime
 
-from config import SCREENSHOT_DIR, DATE_FILTERS
+from config import SCREENSHOT_DIR, DATE_FILTERS, MARKETPLACE_PREFIX
 
 
 def screenshot_present(akun, stamp):
+    # Either naming: SHO_ was added 2026-09-28, older runs have no prefix.
     return all(
-        os.path.exists(os.path.join(SCREENSHOT_DIR, f"{akun}_{f}_{stamp}.png"))
+        any(os.path.exists(os.path.join(SCREENSHOT_DIR, n))
+            for n in (f"{MARKETPLACE_PREFIX}_{akun}_{f}_{stamp}.png",
+                      f"{akun}_{f}_{stamp}.png"))
         for f in DATE_FILTERS
     )
 

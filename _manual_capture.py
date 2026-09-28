@@ -8,7 +8,7 @@ from datetime import datetime
 from PIL import Image
 
 import display
-from config import SCREENSHOT_DIR, DATE_FILTERS
+from config import SCREENSHOT_DIR, DATE_FILTERS, MARKETPLACE_PREFIX
 from shopee_ads_screenshot import CROP_TOP_LEFT, CROP_BOTTOM_RIGHT, pad_to_aspect
 
 AKUN = sys.argv[1].upper() if len(sys.argv) > 1 else "ALUN-M"
@@ -21,7 +21,8 @@ def capture(filter_name):
         "osascript", "-e",
         f'display dialog "Set up the page for {AKUN} {filter_name} (correct metrics + correct date filter), then click OK to capture." with title "Manual Capture" buttons {{"OK"}} default button "OK"'
     ])
-    filepath = os.path.join(SCREENSHOT_DIR, f"{AKUN}_{filter_name}_{timestamp}.png")
+    filepath = os.path.join(SCREENSHOT_DIR,
+                            f"{MARKETPLACE_PREFIX}_{AKUN}_{filter_name}_{timestamp}.png")
     tmp_path = os.path.join(SCREENSHOT_DIR, "_tmp_full.png")
     subprocess.run(["screencapture", "-x", tmp_path])
     img = Image.open(tmp_path)

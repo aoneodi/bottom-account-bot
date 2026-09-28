@@ -17,6 +17,7 @@ from config import (
     SCROLL_DELAY,
     POPUP_WAIT,
     DATE_FILTERS,
+    MARKETPLACE_PREFIX,
 )
 
 pyautogui.FAILSAFE = True
@@ -255,7 +256,7 @@ def pad_to_aspect(img, aspect=None):
 
 def take_screenshot(brand_akun, filter_name, y_offset=0):
     timestamp = datetime.now().strftime("%Y%m%d")
-    filename = f"{brand_akun}_{filter_name}_{timestamp}.png"
+    filename = f"{MARKETPLACE_PREFIX}_{brand_akun}_{filter_name}_{timestamp}.png"
     filepath = os.path.join(SCREENSHOT_DIR, filename)
     # Park the pointer at a safe neutral spot (well above the cards, far from the
     # bottom screen edge) so the macOS auto-hide Dock doesn't slide up into the crop.

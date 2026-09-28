@@ -34,3 +34,8 @@ GCS_BUCKET = ""
 # Shared Drive yang memiliki arsip screenshot di Drive (lihat insert_to_slides.py).
 # Kosong = kembali ke My Drive pribadi pemilik token OAuth.
 DRIVE_SHARED_DRIVE_ID = "0AAJlr-VJ8_EzUk9PVA"   # AHA Bottom Account
+
+# Prefiks marketplace pada nama berkas screenshot: SHO_<AKUN>_<filter>_<tanggal>.png
+# Ada tiktok_ads_screenshot.py di repo ini dan sheet akun memisahkan SHO/LAZ/TOK/TIK,
+# jadi arsipnya harus jelas dari marketplace mana tiap gambar berasal.
+MARKETPLACE_PREFIX = "SHO"

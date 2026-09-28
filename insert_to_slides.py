@@ -8,7 +8,7 @@ from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 
-from config import SLIDES_ID, MEETING_SLIDES_ID, MEETING_SLIDES_IDS, DATE_FILTERS
+from config import MARKETPLACE_PREFIX, SLIDES_ID, MEETING_SLIDES_ID, MEETING_SLIDES_IDS, DATE_FILTERS
 
 # Subtitle text for the template-deck slide of each date filter.
 FILTER_LABELS = {
@@ -445,7 +445,9 @@ def main():
     for akun in brand_list:
         files = sorted([
             f for f in os.listdir(screenshots_dir)
-            if f.startswith(f"{akun}_")
+            # Accepts both the prefixed name and the older un-prefixed one, so a
+            # redo of a brand captured before the SHO_ prefix still finds its file.
+            if f.startswith(f"{MARKETPLACE_PREFIX}_{akun}_") or f.startswith(f"{akun}_")
         ])
 
         # Latest file per date filter (files sort by name, date suffix last, so the
