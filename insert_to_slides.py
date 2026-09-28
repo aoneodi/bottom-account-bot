@@ -95,6 +95,16 @@ def image_url_for(drive_service, image_path):
 
 
 DRIVE_FOLDER_NAME = "Bottom Account Screenshots"
+
+# Shared Drive that owns the archive. Kept out of anyone's personal My Drive so
+# the archive belongs to the organisation and survives an account being closed
+# or handed over — the bot's OAuth is still a personal account, so the archive
+# would otherwise vanish with it. Empty falls back to My Drive.
+try:
+    from config import DRIVE_SHARED_DRIVE_ID
+except ImportError:
+    DRIVE_SHARED_DRIVE_ID = ""
+
 _folder_cache = {}
 _uploaded_ids = []          # public permissions to revoke once the run is done
 
@@ -106,17 +116,21 @@ def _drive_folder(drive_service, name, parent=None):
         return _folder_cache[key]
     q = ("mimeType='application/vnd.google-apps.folder' and trashed=false "
          f"and name='{name}'")
-    if parent:
-        q += f" and '{parent}' in parents"
-    hits = drive_service.files().list(q=q, fields="files(id)",
-                                      pageSize=1).execute().get("files", [])
+    q += f" and '{parent or DRIVE_SHARED_DRIVE_ID or 'root'}' in parents"
+    # Shared Drives are invisible to the Drive API unless every call opts in.
+    extra = ({"supportsAllDrives": True, "includeItemsFromAllDrives": True,
+              "corpora": "drive", "driveId": DRIVE_SHARED_DRIVE_ID}
+             if DRIVE_SHARED_DRIVE_ID else {})
+    hits = drive_service.files().list(q=q, fields="files(id)", pageSize=1,
+                                      **extra).execute().get("files", [])
     if hits:
         fid = hits[0]["id"]
     else:
-        body = {"name": name, "mimeType": "application/vnd.google-apps.folder"}
-        if parent:
-            body["parents"] = [parent]
-        fid = drive_service.files().create(body=body, fields="id").execute()["id"]
+        body = {"name": name, "mimeType": "application/vnd.google-apps.folder",
+                "parents": [parent or DRIVE_SHARED_DRIVE_ID or "root"]}
+        fid = drive_service.files().create(
+            body=body, fields="id",
+            supportsAllDrives=bool(DRIVE_SHARED_DRIVE_ID)).execute()["id"]
     _folder_cache[key] = fid
     return fid
 
@@ -137,7 +151,8 @@ def revoke_public_access(drive_service):
     for fid in _uploaded_ids:
         try:
             drive_service.permissions().delete(
-                fileId=fid, permissionId="anyoneWithLink").execute()
+                fileId=fid, permissionId="anyoneWithLink",
+                supportsAllDrives=bool(DRIVE_SHARED_DRIVE_ID)).execute()
             done += 1
         except Exception:
             pass                      # already gone, or never granted
@@ -161,6 +176,7 @@ def upload_image_to_drive(drive_service, image_path):
         body=file_metadata,
         media_body=media,
         fields="id",
+        supportsAllDrives=bool(DRIVE_SHARED_DRIVE_ID),
     ).execute()
     file_id = file.get("id")
     _uploaded_ids.append(file_id)
@@ -168,6 +184,7 @@ def upload_image_to_drive(drive_service, image_path):
     drive_service.permissions().create(
         fileId=file_id,
         body={"type": "anyone", "role": "reader"},
+        supportsAllDrives=bool(DRIVE_SHARED_DRIVE_ID),
     ).execute()
 
     time.sleep(3)

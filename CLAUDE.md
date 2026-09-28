@@ -332,6 +332,22 @@ Wired into **both** exit paths of `run_weekly.sh` — including the screenshots-
 
 ## Drive uploads
 
+Uploads land in a dedicated **Shared Drive**, not anyone's personal My Drive:
+
+```
+[AHA Bottom Account]  (Shared Drive 0AAJlr-VJ8_EzUk9PVA)
+└── Bottom Account Screenshots/
+    └── YYYY-MM-DD/
+        └── <AKUN>_<filter>_<date>.png
+```
+
+The bot's Drive/Slides OAuth is a **personal account** (`claudia.ong@`), so an archive kept in that account's My Drive would disappear if the account were closed or handed over. A Shared Drive is owned by the organisation instead. `config.DRIVE_SHARED_DRIVE_ID` holds the id; emptying it falls back to My Drive.
+
+**Every Drive API call touching it must pass `supportsAllDrives=True`** (and `includeItemsFromAllDrives` + `corpora`/`driveId` when listing) — Shared Drives are invisible to the API otherwise, and the failure looks like "folder not found" rather than a permission error.
+
+Team access is granted once on the Shared Drive itself, which every file inherits — instead of the old 2048 individual public links.
+
+
 `insert_to_slides.py` uploads each screenshot so Slides has a URL to fetch. Two things about that were wrong until 2026-09-28:
 
 - Files landed in **My Drive's root** with no structure. They now go to `Bottom Account Screenshots / YYYY-MM-DD /`.

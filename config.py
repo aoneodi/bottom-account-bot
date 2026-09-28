@@ -30,3 +30,7 @@ POPUP_WAIT = 2
 # Empty = upload step is skipped. Set this after running setup_gcs.sh.
 # The bucket is private; other systems read it with their own service account.
 GCS_BUCKET = ""
+
+# Shared Drive yang memiliki arsip screenshot di Drive (lihat insert_to_slides.py).
+# Kosong = kembali ke My Drive pribadi pemilik token OAuth.
+DRIVE_SHARED_DRIVE_ID = "0AAJlr-VJ8_EzUk9PVA"   # AHA Bottom Account
