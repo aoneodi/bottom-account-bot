@@ -32,8 +32,8 @@ def screenshot_present(akun, stamp):
 
 
 def parse_log(path):
-    """Return (slides_failures {akun: why}, skipped_by_bot [akun])."""
-    failures, skipped = {}, []
+    """Return (slides_failures, skipped_by_bot, bad_metrics, blocked_by_modal)."""
+    failures, skipped, bad_metrics, modal = {}, [], {}, set()
     if not path or not os.path.exists(path):
         return failures, skipped
     text = open(path, errors="replace").read()
@@ -51,11 +51,31 @@ def parse_log(path):
         blk = text.split("NOT FOUND (skipped")[-1]
         for m in re.finditer(r"^\s+- (\S+)\s*$", blk, re.M):
             skipped.append(m.group(1))
-    return failures, skipped
+
+    # A screenshot can exist and still be worthless: if the metric cards were
+    # not left on Pengeluaran + ROAS, the chart shows the wrong series. On
+    # 2026-09-24 three brands were reported "done" on exactly that basis and the
+    # wrong charts went into the decks. The bot already prints this; the report
+    # just never read it.
+    for m in re.finditer(r"METRICS NOT AS REQUESTED for (\S+?):\s*(.+?)\s+still wrong", text):
+        bad_metrics[m.group(1)] = f"wrong metrics on the chart ({m.group(2)})"
+
+    # A modal the handler could not close usually means the capture is of the
+    # popup rather than the Performa section.
+    for m in re.finditer(r"no close X found", text):
+        pass
+    cur = None
+    for line in text.splitlines():
+        b = re.match(r"^Processing: (\S+)", line)
+        if b:
+            cur = b.group(1)
+        elif cur and ("no close X found" in line or "REFUSING to click" in line):
+            modal.add(cur)
+    return failures, skipped, bad_metrics, modal
 
 
 def build(brands, log, shot_rc, slides_rc, stamp):
-    failures, skipped = parse_log(log)
+    failures, skipped, bad_metrics, modal = parse_log(log)
     rows, ok = [], 0
     for b in brands:
         shot = screenshot_present(b, stamp)
@@ -63,9 +83,17 @@ def build(brands, log, shot_rc, slides_rc, stamp):
             why = "shop not found on Pilih Toko" if b in skipped else "not captured"
             rows.append((b, "NO", "-", why))
             continue
-        if slides_rc != 0 and b in failures:
-            rows.append((b, "yes", "NO", failures[b]))
-        elif b in failures:
+        # The file existing is not the same as the capture being usable.
+        if b in bad_metrics:
+            rows.append((b, "BAD", "inserted" if slides_rc == 0 and b not in failures
+                         else "NO", bad_metrics[b] + " — REDO, the deck has the wrong chart"))
+            continue
+        if b in modal:
+            rows.append((b, "BAD", "inserted" if slides_rc == 0 and b not in failures
+                         else "NO",
+                         "a popup could not be closed — the image is probably of the popup"))
+            continue
+        if b in failures:
             rows.append((b, "yes", "NO", failures[b]))
         elif slides_rc != 0:
             rows.append((b, "yes", "?", "Slides step exited non-zero — verify by hand"))
@@ -80,6 +108,7 @@ def build(brands, log, shot_rc, slides_rc, stamp):
         lines.append(f"{b.ljust(width)}  {s:<4}  {i:<6}  {n}")
 
     bad = [r for r in rows if r[1] != "yes" or r[2] != "yes"]
+    junk = [r for r in rows if r[1] == "BAD"]
     body = [
         "Hi team,",
         "",
@@ -89,6 +118,9 @@ def build(brands, log, shot_rc, slides_rc, stamp):
         *lines,
         "",
     ]
+    if junk:
+        body += ["!! WRONG IMAGE ALREADY IN THE DECKS — redo these first:",
+                 *[f"  - {b}: {n}" for b, s, i, n in junk], ""]
     if bad:
         body += ["NEEDS A MANUAL REDO:",
                  *[f"  - {b}: {n or 'see log'}" for b, s, i, n in bad], ""]

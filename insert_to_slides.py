@@ -55,6 +55,13 @@ def get_credentials():
     return creds
 
 
+# One URL per image per run. add_brand_slide() and replace_meeting_screenshots()
+# each ask for a URL, so the SAME screenshot was uploaded once per deck — three
+# times per brand. That is where 679 of the 1081 Drive copies came from (63%),
+# 125MB of redundant uploads. The URL is reusable across decks, so cache it.
+_url_cache = {}
+
+
 def image_url_for(drive_service, image_path):
     """A URL Slides can fetch this screenshot from.
 
@@ -67,6 +74,8 @@ def image_url_for(drive_service, image_path):
     root by 2026-09-28, 180 of them duplicate names. GCS keeps the object
     private and lets the URL expire.
     """
+    if image_path in _url_cache:
+        return _url_cache[image_path]
     try:
         from config import GCS_BUCKET
     except ImportError:
@@ -78,8 +87,11 @@ def image_url_for(drive_service, image_path):
         url = gcs_upload.signed_url(image_path, stamp=stamp,
                                     bucket_name=GCS_BUCKET, minutes=30)
         time.sleep(1)
+        _url_cache[image_path] = url
         return url
-    return upload_image_to_drive(drive_service, image_path)
+    url = upload_image_to_drive(drive_service, image_path)
+    _url_cache[image_path] = url
+    return url
 
 
 def upload_image_to_drive(drive_service, image_path):
