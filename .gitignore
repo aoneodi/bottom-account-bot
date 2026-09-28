@@ -12,3 +12,5 @@ service_account.json
 fbi-dev-*.json
 .DS_Store
 **/.DS_Store
+gcs-reader-key.json
+*-key.json

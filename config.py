@@ -25,3 +25,8 @@ PAGE_LOAD_WAIT = 3
 CLICK_DELAY = 1
 SCROLL_DELAY = 1
 POPUP_WAIT = 2
+
+# Google Cloud Storage archive for the run's screenshots (see gcs_upload.py).
+# Empty = upload step is skipped. Set this after running setup_gcs.sh.
+# The bucket is private; other systems read it with their own service account.
+GCS_BUCKET = ""

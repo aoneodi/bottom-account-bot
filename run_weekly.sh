@@ -134,6 +134,12 @@ fi
 INS_RC=$?
 log "slides step exit $INS_RC"
 
+# Archive the captures for other systems to read. Runs AFTER the deck work and
+# never gates it: a storage outage must not turn a good run into a failed one,
+# so a non-zero exit here is logged and otherwise ignored.
+"$PYTHON" -u gcs_upload.py >> "$LOG" 2>&1 \
+    || log "WARNING: GCS archive upload failed — screenshots are still on disk"
+
 # Report the outcome per brand. Until 2026-09-21 nothing here sent a result
 # email at all, so a completed run — or a half-failed one — finished silently.
 # report_run.py reads the status back from the log and from the files on disk
