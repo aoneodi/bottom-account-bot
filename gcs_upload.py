@@ -63,6 +63,39 @@ def object_path(local, stamp):
     return f"{PREFIX}/{day}/{name}"
 
 
+def upload_one(local_path, stamp=None, bucket_name=None):
+    """Upload one screenshot and return its gs:// path."""
+    from datetime import datetime as _dt
+    stamp = stamp or _dt.now().strftime("%Y%m%d")
+    bucket_name = bucket_name or GCS_BUCKET
+    dest = object_path(local_path, stamp)
+    _client().bucket(bucket_name).blob(dest).upload_from_filename(
+        local_path, content_type="image/png")
+    return f"gs://{bucket_name}/{dest}"
+
+
+def signed_url(local_path, stamp=None, bucket_name=None, minutes=30):
+    """A short-lived HTTPS URL Google Slides can fetch the image from.
+
+    The bucket stays private. Slides needs to pull the image over plain HTTPS at
+    insert time, and it keeps its own copy afterwards, so a URL that expires in
+    half an hour is enough. This is strictly tighter than the Drive path it
+    replaces, which granted `anyone/reader` permanently and never revoked it —
+    460+ images were still world-readable by link as of 2026-09-28.
+
+    Signing happens locally with the service-account key, but a V4 signed URL is
+    only honoured as far as the signer's own IAM allows, which is why the bot
+    needs objectViewer on the bucket as well as objectCreator.
+    """
+    from datetime import timedelta
+    stamp = stamp or datetime.now().strftime("%Y%m%d")
+    bucket_name = bucket_name or GCS_BUCKET
+    blob = _client().bucket(bucket_name).blob(object_path(local_path, stamp))
+    return blob.generate_signed_url(version="v4",
+                                    expiration=timedelta(minutes=minutes),
+                                    method="GET")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--stamp", default=datetime.now().strftime("%Y%m%d"))

@@ -55,6 +55,33 @@ def get_credentials():
     return creds
 
 
+def image_url_for(drive_service, image_path):
+    """A URL Slides can fetch this screenshot from.
+
+    Prefers the private GCS bucket (short-lived signed URL) when GCS_BUCKET is
+    configured; falls back to the old Drive upload otherwise, so clearing that
+    one config value reverts the behaviour completely.
+
+    The Drive path makes every image permanently readable by anyone with the
+    link and never cleans up — 460+ such files had accumulated in My Drive's
+    root by 2026-09-28, 180 of them duplicate names. GCS keeps the object
+    private and lets the URL expire.
+    """
+    try:
+        from config import GCS_BUCKET
+    except ImportError:
+        GCS_BUCKET = ""
+    if GCS_BUCKET:
+        import gcs_upload
+        stamp = os.path.basename(image_path).rsplit("_", 1)[-1].split(".")[0]
+        gcs_upload.upload_one(image_path, stamp=stamp, bucket_name=GCS_BUCKET)
+        url = gcs_upload.signed_url(image_path, stamp=stamp,
+                                    bucket_name=GCS_BUCKET, minutes=30)
+        time.sleep(1)
+        return url
+    return upload_image_to_drive(drive_service, image_path)
+
+
 def upload_image_to_drive(drive_service, image_path):
     filename = os.path.basename(image_path)
     file_metadata = {"name": filename}
@@ -114,7 +141,7 @@ def add_brand_slide(slides_service, drive_service, brand_akun, screenshots):
     so this normally creates ONE slide per brand)."""
     print(f"  Uploading screenshots to Drive...")
     items = [
-        (upload_image_to_drive(drive_service, screenshots[key]), FILTER_LABELS[key])
+        (image_url_for(drive_service, screenshots[key]), FILTER_LABELS[key])
         for key in DATE_FILTERS if key in screenshots
     ]
 
@@ -273,7 +300,7 @@ def replace_meeting_screenshots(slides_service, drive_service, brand_akun, scree
                 continue
 
             slide_id, old_img_id = brand_data[key]
-            img_url = upload_image_to_drive(drive_service, img_path)
+            img_url = image_url_for(drive_service, img_path)
             safe_name = brand_akun.replace(".", "_")
             new_img_id = f"meeting_img_{safe_name}_{key}_{os.urandom(4).hex()}"
 

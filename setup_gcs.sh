@@ -24,10 +24,17 @@ gcloud storage buckets create "gs://${BUCKET}" \
   --uniform-bucket-level-access \
   --public-access-prevention
 
-echo "==> 2/4 Memberi bot izin TULIS (bukan baca/hapus)"
+echo "==> 2/4 Memberi bot izin tulis + baca"
+# Tulis untuk mengunggah. Baca DIPERLUKAN karena bot membuat signed URL agar
+# Google Slides bisa mengambil gambarnya saat penyisipan: signed URL hanya sah
+# sejauh izin penandatangannya, jadi tanpa izin baca URL-nya akan ditolak.
+# Tetap bukan objectAdmin — bot tidak boleh menghapus arsip.
 gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
   --member="serviceAccount:${BOT_SA}" \
   --role="roles/storage.objectCreator"
+gcloud storage buckets add-iam-policy-binding "gs://${BUCKET}" \
+  --member="serviceAccount:${BOT_SA}" \
+  --role="roles/storage.objectViewer"
 
 echo "==> 3/4 Membuat service account khusus untuk sistem lain (hanya BACA)"
 gcloud iam service-accounts create "${READER_SA_NAME}" \
