@@ -202,6 +202,17 @@ def delete_existing_brand_slides(slides_service, brand_akun):
         slide_id = slide.get("objectId")
         if slide_id == TEMPLATE_SLIDE_ID:
             continue
+        # The TikTok bot (../tiktok-screenshot-bot) keeps its slides in this same
+        # deck under the same akun title, subtitled "TIK ROAS …" — plus weeks of TIK
+        # history. Matching on the title alone deleted all of them for every brand
+        # this bot processed. Only this bot's own slides are ours to delete.
+        slide_texts = [
+            t.get("textRun", {}).get("content", "").strip()
+            for el in slide.get("pageElements", [])
+            for t in el.get("shape", {}).get("text", {}).get("textElements", [])
+        ]
+        if any(c.startswith("TIK") for c in slide_texts):
+            continue
         for element in slide.get("pageElements", []):
             shape = element.get("shape", {})
             placeholder = shape.get("placeholder", {})
