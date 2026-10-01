@@ -403,18 +403,54 @@ def get_seller_domain(akun):
     return "seller.shopee.co.id"
 
 
-def click_iklan_shopee(akun):
+def current_url():
+    """The front tab's URL, straight from Chrome — no pixel guessing."""
+    r = subprocess.run(
+        ["osascript", "-e",
+         'tell application "Google Chrome" to get URL of active tab of window 1'],
+        capture_output=True, text=True)
+    return r.stdout.strip()
+
+
+def click_iklan_shopee(akun, attempts=3):
+    """Navigate to the brand's Iklan Shopee page, and CONFIRM we got there.
+
+    The bot used to type the URL, wait, and carry straight on. When the
+    navigation did not take — Shopee bounces back to the dashboard while a
+    mandatory task is pending, e.g. the "Update titik lokasi toko" modal seen
+    on 2026-10-01 — it scrolled and clicked on the dashboard instead and saved a
+    screenshot of that. The image looks like a real page, so nothing downstream
+    noticed; only a human spotting the wrong layout did.
+
+    Asking Chrome for the URL is exact, unlike inferring the page from pixels.
+    """
     domain = get_seller_domain(akun)
-    pyautogui.hotkey("command", "l")
-    time.sleep(0.5)
-    pyautogui.typewrite(f"https://{domain}/portal/marketing/pas/index", interval=0.01)
-    time.sleep(0.3)
-    pyautogui.press("enter")
-    # Wait long enough for the page to load AND leave a generous ~15s window for the
-    # user to manually close the "Bonus Eksklusif" popup (its light backdrop isn't
-    # caught by is_popup_present, so it must be dismissed by hand). Mouse stays still
-    # during this sleep, so the user's X-click won't fight the bot.
-    time.sleep(PAGE_LOAD_WAIT + 15)
+    target = f"https://{domain}/portal/marketing/pas/index"
+    for attempt in range(1, attempts + 1):
+        pyautogui.hotkey("command", "l")
+        time.sleep(0.5)
+        pyautogui.typewrite(target, interval=0.01)
+        time.sleep(0.3)
+        pyautogui.press("enter")
+        # Long enough for the page to load, and a window for a popup to be
+        # dismissed by hand if the automatic handling cannot shift it.
+        time.sleep(PAGE_LOAD_WAIT + 15)
+
+        url = current_url()
+        if "/marketing/pas" in url:
+            return True
+        print(f"    ⚠ navigation did not stick (on {url!r}) — "
+              f"attempt {attempt}/{attempts}")
+        # A modal can swallow the address-bar focus; clear it and retry.
+        popups.dismiss()
+        popups.dismiss_modal()
+        pyautogui.press("escape")
+        time.sleep(1)
+
+    print(f"    ⚠ could not reach the Iklan page for {akun} — NOT capturing the "
+          f"dashboard by mistake")
+    display.save_debug_shot(f"nav_failed_{akun}")
+    return False
 
 
 def is_popup_present():
@@ -634,7 +670,10 @@ def process_brand(akun):
     click_first_detail()
 
     print("  4. Navigating to Iklan Shopee...")
-    click_iklan_shopee(akun)
+    if not click_iklan_shopee(akun):
+        print(f"  ⚠ '{akun}' never reached the Iklan page — skipping rather than "
+              f"screenshotting whatever page is showing.")
+        return None
 
     print("  5. Closing popup...")
     close_popup()

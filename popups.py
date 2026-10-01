@@ -212,7 +212,20 @@ def backdrop_dimmed(img, min_hits=3):
 
 
 def modal_box(img):
-    """Bounding box of the bright dialog sitting on the dimmed page."""
+    """Bounding box of the dialog sitting on the dimmed page.
+
+    Found in two steps, because neither half works alone:
+
+    1. Locate the SCRIM — flat neutral grey, roughly 120..190 on every channel.
+       It covers the page but not Chrome's own toolbar.
+    2. Inside that region only, take the block that is clearly brighter than it.
+
+    Testing brightness alone picks up the browser toolbar, which is bright and
+    sits above the scrim. Testing near-white alone clips the top off any dialog
+    with a tinted header — the 2026-10-01 "Bonus Eksklusif" modal has a peach
+    gradient at (253,233,223), so the rows holding its close X were dropped from
+    the box and the X was reported missing on all 5 brands it blocked.
+    """
     import numpy as np
     scale = display.scale()
     a = np.asarray(img.convert("RGB"), dtype=np.int16)
@@ -221,12 +234,43 @@ def modal_box(img):
         a = np.asarray(img.convert("RGB").resize(
             (round(img.width / scale), round(img.height / scale)),
             Image.BILINEAR), dtype=np.int16)
-    bright = (a.min(axis=2) > 235)
+
+    mx, mn = a.max(axis=2), a.min(axis=2)
+    scrim = (mn > 110) & (mx < 195) & ((mx - mn) < 18)
+    # Thresholds are a fraction of the frame, not absolute counts: a scrim row
+    # spans most of the page (1400-1900px of 1920 in practice), while stray grey
+    # in Chrome's own toolbar never does. An absolute 200 let the toolbar in and
+    # put the box top at y=90 instead of the page top at y=151.
+    h, w = scrim.shape
+    scrim_rows = np.where(scrim.sum(axis=1) > 0.45 * w)[0]
+    scrim_cols = np.where(scrim.sum(axis=0) > 0.25 * h)[0]
+    if scrim_rows.size == 0 or scrim_cols.size == 0:
+        return None
+    t0, b0 = int(scrim_rows[0]), int(scrim_rows[-1])
+    l0, r0 = int(scrim_cols[0]), int(scrim_cols[-1])
+
+    region = a[t0:b0 + 1, l0:r0 + 1]
+    bright = (region.max(axis=2) > 200)
     rows = np.where(bright.sum(axis=1) > 150)[0]
-    cols = np.where(bright.sum(axis=0) > 150)[0]
+    cols = np.where(bright.sum(axis=0) > 60)[0]
     if rows.size == 0 or cols.size == 0:
         return None
-    return int(cols[0]), int(rows[0]), int(cols[-1]), int(rows[-1])
+    box = (l0 + int(cols[0]), t0 + int(rows[0]),
+           l0 + int(cols[-1]), t0 + int(rows[-1]))
+
+    # Sanity-check the shape before anyone clicks inside it. macOS notification
+    # banners sit on top of the scrim at the right edge of the screen and are
+    # bright, so they merge into the box and drag it across most of the frame —
+    # on 2026-09-28 that produced a "close X" sitting on a Notification Centre
+    # banner ("Data Isn't Syncing"), which a click would have actioned. A real
+    # dialog is a block in the middle, not something hugging an edge.
+    bw, bh = box[2] - box[0], box[3] - box[1]
+    frame_w, frame_h = a.shape[1], a.shape[0]
+    if bw > 0.60 * frame_w or bw < 150 or bh < 80:
+        return None
+    if box[2] > frame_w - 30 or box[0] < 30:
+        return None
+    return box
 
 
 def find_close_x(img, box, margin=90):
@@ -250,7 +294,12 @@ def find_close_x(img, box, margin=90):
             if rgb is None:
                 continue
             cr, cg, cb = rgb
-            if 90 < cr < 205 and abs(cr - cg) < 18 and abs(cg - cb) < 18:
+            # Close glyphs range from mid grey to very light: the 2026-10-01
+            # "Bonus Eksklusif" X reads ~142, the "Update titik lokasi" X on the
+            # same day ~211-244. An upper bound of 205 found the first and
+            # missed the second. White (>=250) is still excluded, and the
+            # shape/size test below is what actually rejects stray text.
+            if 90 < cr < 246 and abs(cr - cg) < 18 and abs(cg - cb) < 18:
                 pts.add((x, y))
 
     best = None
@@ -271,7 +320,7 @@ def find_close_x(img, box, margin=90):
         ys = [q[1] for q in comp]
         w, h = max(xs) - min(xs) + 1, max(ys) - min(ys) + 1
         # An X is small, roughly square, and a solid little cluster of strokes.
-        if 8 <= w <= 40 and 8 <= h <= 40 and 0.6 < w / h < 1.7 and len(comp) >= 20:
+        if 8 <= w <= 40 and 8 <= h <= 40 and 0.6 < w / h < 1.7 and len(comp) >= 12:
             if best is None or len(comp) > best[0]:
                 best = (len(comp), ((min(xs) + max(xs)) // 2,
                                     (min(ys) + max(ys)) // 2))
