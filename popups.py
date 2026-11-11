@@ -327,8 +327,26 @@ def find_close_x(img, box, margin=90):
     return best[1] if best else None
 
 
-def dismiss_modal(verbose=True):
-    """Close a dimmed-backdrop modal by its X. Returns True if one was closed."""
+def dismiss_modal(verbose=True, rounds=4):
+    """Close dimmed-backdrop modals by their X, peeling stacked ones.
+
+    Shopee stacks them: on 2026-10-08 ELF-M had a promo dialog over a "Misi
+    Hadiah Eksklusif" dialog, so closing the first left the backdrop dimmed and
+    the cards still covered. A single pass reported "backdrop still dimmed" and
+    gave up, and the brand captured the wrong metrics. Each round must close a
+    DIFFERENT box, otherwise the same dialog is refusing to go and looping would
+    just click it forever.
+    """
+    closed = 0
+    seen = set()
+    for _ in range(rounds):
+        if not _dismiss_one_modal(verbose, seen):
+            break
+        closed += 1
+    return closed > 0
+
+
+def _dismiss_one_modal(verbose, seen):
     img = _capture()
     if not backdrop_dimmed(img):
         return False
@@ -337,6 +355,11 @@ def dismiss_modal(verbose=True):
         if verbose:
             print("    Dimmed backdrop but no dialog box found")
         return False
+    if box in seen:
+        if verbose:
+            print(f"    Dialog at {box} did not close — not clicking it again")
+        return False
+    seen.add(box)
     target = find_close_x(img, box)
     if target is None:
         if verbose:
@@ -352,9 +375,12 @@ def dismiss_modal(verbose=True):
     pyautogui.click(*target)
     time.sleep(1.5)
     if backdrop_dimmed(_capture()):
+        # Not necessarily a failure: another dialog may be stacked underneath.
+        # The caller loops, and the `seen` set stops it clicking the same box.
         if verbose:
-            print("    ⚠ backdrop still dimmed after clicking the X")
-        return False
+            print("    Backdrop still dimmed — checking for another dialog "
+                  "underneath")
+        return True
     if verbose:
         print("    Modal closed")
     return True
