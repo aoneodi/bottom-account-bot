@@ -38,8 +38,11 @@ def parse_log(path):
     """Return (slides_failures, skipped_by_bot, bad_metrics, blocked_by_modal)."""
     failures, skipped, bad_metrics, modal = {}, [], {}, set()
     if not path or not os.path.exists(path):
-        return failures, skipped
+        return failures, skipped, bad_metrics, modal
     text = open(path, errors="replace").read()
+    # The daily log holds every tick; only the last one is this run.
+    if "===== tick =====" in text:
+        text = text[text.rindex("===== tick ====="):]
 
     # insert_to_slides.py: "    - AKUN: reason" under "⚠ FAILED brands"
     tail = text.split("FAILED brands")[-1] if "FAILED brands" in text else ""
@@ -74,6 +77,10 @@ def parse_log(path):
             cur = b.group(1)
         elif cur and ("no close X found" in line or "REFUSING to click" in line):
             modal.add(cur)
+    # The bot's retry pass redid these cleanly; the first attempt's warnings are moot.
+    for m in re.finditer(r"RETRY OK for (\S+)", text):
+        bad_metrics.pop(m.group(1), None)
+        modal.discard(m.group(1))
     return failures, skipped, bad_metrics, modal
 
 
@@ -83,13 +90,17 @@ def build(brands, log, shot_rc, slides_rc, stamp):
     for b in brands:
         shot = screenshot_present(b, stamp)
         if not shot:
-            why = "shop not found on Pilih Toko" if b in skipped else "not captured"
+            why = ("shop not found on Pilih Toko, even on retry — ACTION: ask an admin to add "
+                   "this shop to the ahacommerce:biteam account" if b in skipped
+                   else "not captured, even on the automatic retry")
             rows.append((b, "NO", "-", why))
             continue
         # The file existing is not the same as the capture being usable.
         if b in bad_metrics:
-            rows.append((b, "BAD", "inserted" if slides_rc == 0 and b not in failures
-                         else "NO", bad_metrics[b] + " — REDO, the deck has the wrong chart"))
+            # run_weekly.sh holds these back from Slides (since 2026-10), so the deck
+            # still shows last week's chart rather than a wrong new one.
+            rows.append((b, "BAD", "held", bad_metrics[b] + " even after the automatic retry"
+                         " — not inserted, the deck keeps last week's chart"))
             continue
         if b in modal:
             rows.append((b, "BAD", "inserted" if slides_rc == 0 and b not in failures
@@ -122,7 +133,7 @@ def build(brands, log, shot_rc, slides_rc, stamp):
         "",
     ]
     if junk:
-        body += ["!! WRONG IMAGE ALREADY IN THE DECKS — redo these first:",
+        body += ["Captured with the WRONG metrics (held back from the decks):",
                  *[f"  - {b}: {n}" for b, s, i, n in junk], ""]
     if bad:
         body += ["NEEDS A MANUAL REDO:",

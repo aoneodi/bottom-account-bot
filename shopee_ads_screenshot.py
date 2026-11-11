@@ -648,7 +648,16 @@ def go_back_to_pilih_toko(akun=None):
     time.sleep(PAGE_LOAD_WAIT)
 
 
+# Why a brand failed, read by main()'s retry pass. A search with no result is the
+# only failure that is usually permanent (shop not on this account); even that is
+# retried once, because a page that had not loaded looks the same (CTW-M, 2026-11-05).
+SEARCH_NOT_FOUND = set()
+METRICS_WRONG = set()
+
+
 def process_brand(akun):
+    SEARCH_NOT_FOUND.discard(akun)
+    METRICS_WRONG.discard(akun)
     username = BRANDS.get(akun)
     if not username:
         print(f"  Brand '{akun}' not found in brands.csv, skipping.")
@@ -664,6 +673,7 @@ def process_brand(akun):
     if not search_and_verify(akun, username):
         print(f"  ⚠ '{akun}' not found on Pilih Toko after retries — account likely "
               f"not held. Skipping to avoid screenshotting the previously-selected shop.")
+        SEARCH_NOT_FOUND.add(akun)
         return None
 
     print("  3. Clicking Detail...")
@@ -717,6 +727,7 @@ def process_brand(akun):
               f"still wrong after toggling (want only "
               f"{', '.join(sorted(DESIRED_SELECTED))}).")
         display.save_debug_shot(f"metrics_{akun}")
+        METRICS_WRONG.add(akun)
     else:
         print(f"    Verified: only {', '.join(sorted(DESIRED_SELECTED))} selected")
 
@@ -825,6 +836,26 @@ def calibrate_crop():
     print(f"CROP_BOTTOM_RIGHT = ({br.x}, {br.y})")
 
 
+def _attempt(akun):
+    """One try at a brand -> (status, screenshots). status is ok / not_found /
+    failed / bad_metrics. A crash in one brand no longer ends the whole run."""
+    try:
+        shots = process_brand(akun)
+    except pyautogui.FailSafeException:
+        raise                                   # the user slammed the mouse: stop
+    except Exception as e:
+        print(f"  ⚠ {akun}: crashed ({type(e).__name__}: {str(e)[:160]})")
+        display.save_debug_shot(f"crash_{akun}")
+        return "failed", []
+    if shots is None:
+        return ("not_found" if akun in SEARCH_NOT_FOUND else "failed"), []
+    if not shots:
+        return "failed", []
+    if akun in METRICS_WRONG:
+        return "bad_metrics", shots
+    return "ok", shots
+
+
 def main():
     if len(sys.argv) >= 2 and sys.argv[1] == "--calibrate":
         calibrate()
@@ -870,13 +901,39 @@ def main():
         time.sleep(1)
 
     all_screenshots = {}
-    not_found = []
+    status = {}
     for akun in brand_list:
-        screenshots = process_brand(akun)
-        if screenshots:
-            all_screenshots[akun] = screenshots
-        elif screenshots is None:
-            not_found.append(akun)
+        status[akun], shots = _attempt(akun)
+        if shots:
+            all_screenshots[akun] = shots
+
+    # One retry pass, same day, for every brand that did not come out clean. Most
+    # failures are transient — a slow Iklan page, a popup, a missed click — and
+    # until 2026-11 each one cost the team a manual redo. Runs before Slides, so a
+    # brand fixed here goes into the decks like any other.
+    retry = [a for a in brand_list if status[a] != "ok"]
+    if retry:
+        print("\n" + "=" * 50)
+        print(f"RETRY PASS — {len(retry)} brand(s): {', '.join(retry)}")
+        print("=" * 50)
+        for akun in retry:
+            try:
+                go_back_to_pilih_toko()
+            except pyautogui.FailSafeException:
+                raise
+            except Exception:
+                pass
+            first = status[akun]
+            status[akun], shots = _attempt(akun)
+            if shots:
+                all_screenshots[akun] = shots
+            if status[akun] == "ok":
+                # run_weekly.sh and report_run.py read this line to drop the
+                # first attempt's "METRICS NOT AS REQUESTED" warning.
+                print(f"  ✓ RETRY OK for {akun} (first attempt: {first})")
+            else:
+                print(f"  ✗ RETRY FAILED for {akun}: {status[akun]}")
+    not_found = [a for a in brand_list if status[a] == "not_found"]
 
     print("\n" + "=" * 50)
     print("DONE! Screenshots saved:")

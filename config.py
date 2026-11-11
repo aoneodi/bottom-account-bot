@@ -18,7 +18,7 @@ DATE_FILTERS = ["1bulan"]
 # Email notification
 EMAIL_SENDER = "bot@ahacommerce.net"  # impersonated via service-account domain-wide delegation
 EMAIL_SENDER_NAME = "AHAbot™"  # display name shown on the From line
-EMAIL_RECIPIENTS = ["tfbi@ahacommerce.net", "claudia.ong@ahacommerce.net"]
+EMAIL_RECIPIENTS = ["tfbi@ahacommerce.net", "claudia.ong@ahacommerce.net", "fast@ahacommerce.net"]
 
 # Timing configs (seconds) - adjust if Shopee is slow
 PAGE_LOAD_WAIT = 3

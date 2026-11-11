@@ -50,6 +50,15 @@ trap cleanup EXIT INT TERM
 
 log "===== tick ====="
 
+# --- does python still hold its macOS permissions? -------------------------
+# A Homebrew python upgrade silently drops them (2026-11-05: the whole Thursday
+# was lost). check_perms.py names what is missing and emails the fix once a day.
+if ! "$PYTHON" -u check_perms.py --bot "Shopee Bottom Account" \
+        --alert "$STATE_DIR/permalert_$STAMP" >> "$LOG" 2>&1; then
+    log "macOS permission missing — alert sent, will retry next tick"
+    exit 0
+fi
+
 # --- is the session alive? ---------------------------------------------------
 "$PYTHON" -u preflight.py >> "$LOG" 2>&1
 PRE=$?
@@ -130,8 +139,42 @@ if [ $SHOT_RC -ne 0 ]; then
     exit $SHOT_RC
 fi
 
-"$PYTHON" -u insert_to_slides.py ${=BRANDS} >> "$LOG" 2>&1
+# Do not push a capture whose metrics the bot itself flagged as wrong. The
+# screenshot exists and looks like a real page, so a file-existence check waves
+# it through — that is how wrong charts reached the decks on 2026-09-24,
+# 2026-10-01 and again on 2026-10-08. The brand is left for a redo instead; its
+# slide keeps last week's chart, which is wrong-but-old rather than wrong-and-new.
+# Only this tick's lines (the daily log also holds earlier ticks), and minus the
+# brands the retry pass then captured cleanly ("RETRY OK for X").
+TICK_LOG=$(awk '/===== tick =====/{buf=""} {buf=buf $0 "\n"} END{printf "%s", buf}' "$LOG")
+RETRIED_OK=$(echo "$TICK_LOG" | grep -oE "RETRY OK for [A-Z0-9.-]+" | awk '{print $NF}' | sort -u)
+BAD=$(echo "$TICK_LOG" | grep -oE "NOT AS REQUESTED for [A-Z0-9.-]+" | awk '{print $NF}' | sort -u \
+      | grep -vxF -f <(echo "$RETRIED_OK") 2>/dev/null)
+INSERTABLE=""
+# Only brands captured TODAY. insert_to_slides.py picks the newest file per brand,
+# so a brand that failed today would otherwise get an OLD chart pushed in as if it
+# were new — on 2026-11-05 SOFT-M got 29/10's and CTW-M got 24/09's.
+NOSHOT=""
+for b in ${=BRANDS}; do
+    echo "$BAD" | grep -qx "$b" && continue
+    if [ -f "screenshots/SHO_${b}_1bulan_$STAMP.png" ] || [ -f "screenshots/${b}_1bulan_$STAMP.png" ]; then
+        INSERTABLE="$INSERTABLE $b"
+    else
+        NOSHOT="$NOSHOT $b"
+    fi
+done
+[ -n "$NOSHOT" ] && log "NOT inserting (no screenshot today, deck keeps last week's):$NOSHOT"
+if [ -n "$BAD" ]; then
+    log "⚠ NOT inserting (metrics flagged wrong): $(echo $BAD | tr '\n' ' ')"
+fi
+
+if [ -z "$INSERTABLE" ]; then
+    log "no brand passed the metric check — skipping Slides entirely"
+    INS_RC=1
+else
+"$PYTHON" -u insert_to_slides.py ${=INSERTABLE} >> "$LOG" 2>&1
 INS_RC=$?
+fi
 log "slides step exit $INS_RC"
 
 # Archive the captures for other systems to read. Runs AFTER the deck work and
