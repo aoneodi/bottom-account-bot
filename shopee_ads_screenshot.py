@@ -9,6 +9,7 @@ from datetime import datetime
 
 import display
 import popups
+import shopee_lang
 from config import (
     SELLER_CENTER_URL,
     SCREENSHOT_DIR,
@@ -652,6 +653,7 @@ def go_back_to_pilih_toko(akun=None):
 # only failure that is usually permanent (shop not on this account); even that is
 # retried once, because a page that had not loaded looks the same (CTW-M, 2026-11-05).
 SEARCH_NOT_FOUND = set()
+LANG_TOUCHED = set()      # languages this run switched to; "en" means restore at the end
 METRICS_WRONG = set()
 
 
@@ -684,6 +686,18 @@ def process_brand(akun):
         print(f"  ⚠ '{akun}' never reached the Iklan page — skipping rather than "
               f"screenshotting whatever page is showing.")
         return None
+
+    # Thai brands are captured in English, the rest in Indonesian (asked 2026-11-11).
+    # The setting is account-wide, so it only flips when the brand's market changes.
+    want_lang = "en" if akun.startswith("TH.") else "id"
+    if shopee_lang.ENABLED and shopee_lang.current() != want_lang:
+        print(f"  4a. Switching Seller Centre language to {shopee_lang.LABELS[want_lang]}...")
+        LANG_TOUCHED.add(want_lang)
+        if not shopee_lang.switch(want_lang):
+            print(f"  ⚠ could not switch the language for {akun} — capturing anyway")
+        time.sleep(PAGE_LOAD_WAIT + 5)
+        if "/marketing/pas" not in current_url():
+            click_iklan_shopee(akun)
 
     print("  5. Closing popup...")
     close_popup()
@@ -934,6 +948,18 @@ def main():
             else:
                 print(f"  ✗ RETRY FAILED for {akun}: {status[akun]}")
     not_found = [a for a in brand_list if status[a] == "not_found"]
+
+    # Never leave the shared biteam account in English for the team.
+    if "en" in LANG_TOUCHED:
+        print("\n  Restoring Seller Centre language to Bahasa Indonesia...")
+        try:
+            if not shopee_lang.restore_indonesian():
+                print("  ⚠ LANGUAGE STILL ENGLISH — switch it back by hand (account menu)")
+            go_back_to_pilih_toko()
+        except pyautogui.FailSafeException:
+            raise
+        except Exception as e:
+            print(f"  ⚠ language restore failed: {e} — switch it back by hand (account menu)")
 
     print("\n" + "=" * 50)
     print("DONE! Screenshots saved:")

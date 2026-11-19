@@ -15,43 +15,44 @@
 	     Weekday 4 = Thursday. Fires every 15 min from 07:30 to 09:00; each tick
 	     is idempotent and exits at once if the run already succeeded today, so
 	     the user only has to log in when the reminder email arrives. -->
+	<!-- schedule: Sel 07:30–09:00, tiap 15 menit (7× coba sampai berhasil) — diubah dari AHA Control Panel 2026-11-18 11:12. Comments above may describe an older schedule. -->
 	<key>StartCalendarInterval</key>
 	<array>
-			<dict>
-				<key>Weekday</key><integer>4</integer>
-				<key>Hour</key><integer>7</integer>
-				<key>Minute</key><integer>30</integer>
-			</dict>
-			<dict>
-				<key>Weekday</key><integer>4</integer>
-				<key>Hour</key><integer>7</integer>
-				<key>Minute</key><integer>45</integer>
-			</dict>
-			<dict>
-				<key>Weekday</key><integer>4</integer>
-				<key>Hour</key><integer>8</integer>
-				<key>Minute</key><integer>0</integer>
-			</dict>
-			<dict>
-				<key>Weekday</key><integer>4</integer>
-				<key>Hour</key><integer>8</integer>
-				<key>Minute</key><integer>15</integer>
-			</dict>
-			<dict>
-				<key>Weekday</key><integer>4</integer>
-				<key>Hour</key><integer>8</integer>
-				<key>Minute</key><integer>30</integer>
-			</dict>
-			<dict>
-				<key>Weekday</key><integer>4</integer>
-				<key>Hour</key><integer>8</integer>
-				<key>Minute</key><integer>45</integer>
-			</dict>
-			<dict>
-				<key>Weekday</key><integer>4</integer>
-				<key>Hour</key><integer>9</integer>
-				<key>Minute</key><integer>0</integer>
-			</dict>
+		<dict>
+			<key>Weekday</key><integer>2</integer>
+			<key>Hour</key><integer>7</integer>
+			<key>Minute</key><integer>30</integer>
+		</dict>
+		<dict>
+			<key>Weekday</key><integer>2</integer>
+			<key>Hour</key><integer>7</integer>
+			<key>Minute</key><integer>45</integer>
+		</dict>
+		<dict>
+			<key>Weekday</key><integer>2</integer>
+			<key>Hour</key><integer>8</integer>
+			<key>Minute</key><integer>0</integer>
+		</dict>
+		<dict>
+			<key>Weekday</key><integer>2</integer>
+			<key>Hour</key><integer>8</integer>
+			<key>Minute</key><integer>15</integer>
+		</dict>
+		<dict>
+			<key>Weekday</key><integer>2</integer>
+			<key>Hour</key><integer>8</integer>
+			<key>Minute</key><integer>30</integer>
+		</dict>
+		<dict>
+			<key>Weekday</key><integer>2</integer>
+			<key>Hour</key><integer>8</integer>
+			<key>Minute</key><integer>45</integer>
+		</dict>
+		<dict>
+			<key>Weekday</key><integer>2</integer>
+			<key>Hour</key><integer>9</integer>
+			<key>Minute</key><integer>0</integer>
+		</dict>
 	</array>
 	<key>RunAtLoad</key>
 	<false/>
